@@ -14,11 +14,11 @@ fyers.setAccessToken(process.env.access_token);
 // })
 
 var inp = {
-    "symbol": "NSE:SBIN-EQ",
-    "resolution": "1",
+    "symbol": "NSE:BSE-EQ",
+    "resolution": "5",
     "date_format": "1",
-    "range_from": "2026-01-01",
-    "range_to": "2026-01-31",
+    "range_from": "2026-02-10",
+    "range_to": "2026-02-11",
     "cont_flag": "1"
 }
 

@@ -28,3 +28,23 @@ export function calculateDailyVWAP(candles) {
     };
   });
 }
+
+let cumulativePV = 0;
+let cumulativeVolume = 0;
+let currentDay = null;
+
+export function updateVWAP(tick) {
+  const day = tick.timestamp.split(" ")[0];
+
+  if (day !== currentDay) {
+    currentDay = day;
+    cumulativePV = 0;
+    cumulativeVolume = 0;
+  }
+
+  const tp = (tick.high + tick.low + tick.close) / 3;
+  cumulativePV += tp * tick.volume;
+  cumulativeVolume += tick.volume;
+
+  return cumulativePV / cumulativeVolume;
+}

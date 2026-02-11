@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { updateVWAP } from "./src/indicators/vwap.js";
 import { vwapPullback } from "./src/indicators/vwap.Pullback.js";
+import { backtestSignals, findBestRiskReward } from "./src/indicators/backtest.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,4 +48,10 @@ for (const row of data) {
 
 console.log("rows", data.length);
 console.log("signals", signals.length);
-console.log("first5", signals.slice(0, 5));
+// console.log("first5", signals);
+
+const result = backtestSignals({ data, signals, riskReward: 1, stopLossPoints: 5, entryOnNextOpen: false });
+console.log("backtest", result);
+
+// const best = findBestRiskReward({ data, signals, ratios: [1, 1.5, 2, 2.5, 3], stopLossPoints: 5 });
+// console.log("best", best);

@@ -1,8 +1,7 @@
-/node_modules
-/.env
-/logs
-/data
-/venv
+/fyers/node_modules
+*/.env
 *.pyc
 _pycache_/
-/python-ml/output
+/python-ml/trained_model
+*/__pycache__
+/python-ml/venv

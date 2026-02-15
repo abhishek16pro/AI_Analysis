@@ -1,8 +1,8 @@
+python-dotenv
+pymongo
 pandas
-numpy
 ta
-xgboost
-scikit-learn
-fastapi
-uvicorn
 joblib
+xgboost 
+scikit-learn
+matplotlib

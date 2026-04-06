@@ -1,65 +1,65 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+
 dotenv.config();
 
 let isConnected = false;
 
-export async function connectDB() {
+async function connectDB() {
+  if (isConnected) return;
 
-    if (isConnected) {
-        console.log("MongoDB already connected");
-        return;
+  const mongoDbName = "AI_Analysis";
+  const serverIp = "localhost";
+  const isDev = process.argv.includes("--dev");
+
+  const mongoUsername = encodeURIComponent(process.env.MONGO_USERNAME);
+  const mongoPassword = encodeURIComponent(process.env.MONGO_PASSWORD);
+  const mongoAuthSource = process.env.MONGO_AUTH_SOURCE || "admin";
+  
+  const MONGO_URI = isDev ?
+    `mongodb://${serverIp}:27017/${mongoDbName}` :
+    `mongodb://${mongoUsername}:${mongoPassword}@${serverIp}:27017/${mongoDbName}?authSource=${mongoAuthSource}`;
+    // "mongodb://derivix%40xts:derivix%40xts@13.126.47.249:27017/?authSource=admin";
+
+  // if(isDev){
+  //   MONGO_URI = `mongodb://localhost:27017/${mongoDbName}`;
+  // }
+
+  // MONGO_URI = `mongodb://${mongoUsername}:${mongoPassword}@${serverIp}:27017/${mongoDbName}?authSource=${mongoAuthSource}`;
+ 
+
+  const options = {   
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    connectTimeoutMS: 30000,
+    socketTimeoutMS: 30000,
+    serverSelectionTimeoutMS: 30000,
+  };
+
+  try {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(MONGO_URI, options);
+      isConnected = mongoose.connection.readyState === 1;
+      console.log("Connected to MongoDB:", isConnected);
     }
 
-    try {
+    mongoose.connection.on("error", (err) => {
+      console.error("Mongoose connection error:", err.message);
+    });
 
-        const MONGODB_URI = process.env.MONGODB_URI;
-        console.log("Attempting to connect to MongoDB with URI:", MONGODB_URI);
-
-
-        const conn = await mongoose.connect(MONGODB_URI, {
-            dbName: process.env.MONGODB_NAME || "AI_Analysis",
-            // recommended options
-            maxPoolSize: 20,
-            minPoolSize: 5,
-
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000
-        });
-
-        isConnected = true;
-
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-
-        // connection events
-        mongoose.connection.on("connected", () => {
-            console.log("Mongoose connected");
-        });
-
-        mongoose.connection.on("error", (err) => {
-            console.error("Mongoose error:", err);
-        });
-
-        mongoose.connection.on("disconnected", () => {
-            console.warn("Mongoose disconnected");
-            isConnected = false;
-        });
-
-    } catch (error) {
-
-        console.error("MongoDB connection failed:", error.message);
-
-        process.exit(1);
-    }
+    mongoose.connection.on("disconnected", async () => {
+      console.warn("Mongoose connection lost. Attempting to reconnect...");
+      try {
+        await mongoose.connect(MONGO_URI, options);
+        console.log("Reconnected to MongoDB");
+      } catch (err) {
+        console.error("Failed to reconnect to MongoDB:", err.message);
+      }
+    });
+  } catch (error) {
+    console.error("Error connecting to database:", error.message);
+    throw error;
+  }
 }
 
-export async function disconnectDB() {
-    try {
-        if (!isConnected) return;
-        await mongoose.connection.close();
-        isConnected = false;
-        console.log("MongoDB disconnected successfully");
-    } catch (error) {
-        console.error("Error disconnecting MongoDB:", error.message);
-    }
-}
+export default connectDB;

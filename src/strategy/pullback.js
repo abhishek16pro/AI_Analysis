@@ -132,11 +132,11 @@ export async function afterTrigger(stg) {
     if (isReset) {
       logger.info("Resetting logs for", stg.name, "removing logs for next run!");
 
-      // await DynamicStg.findOneAndUpdate(
-      //   { _id: stg._id },
-      //   { $unset: { log: 1 } },
-      //   { returnDocument: 'after' }
-      // );
+      await DynamicStg.findOneAndUpdate(
+        { _id: stg._id },
+        { $unset: { log: 1 } },
+        { returnDocument: 'after' }
+      );
     }
 
     return stg

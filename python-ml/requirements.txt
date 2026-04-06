@@ -1,8 +1,0 @@
-python-dotenv
-pymongo
-pandas
-ta
-joblib
-xgboost 
-scikit-learn
-matplotlib

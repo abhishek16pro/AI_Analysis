@@ -1,7 +1,2 @@
-/fyers/node_modules
-*/.env
-*.pyc
-_pycache_/
-/python-ml/trained_model
-*/__pycache__
-/python-ml/venv
+logs
+node_modules

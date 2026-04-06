@@ -1,14 +1,16 @@
 import { fyersModel } from "fyers-api-v3";
-import { connectDB, disconnectDB } from "../utils/connectDB.js";
 import Candle from "../../models/candle.js";
+import connectRedis from "../utils/connectRedis.js";
 import dotenv from "dotenv";
 dotenv.config();
 
 var fyers = new fyersModel({ enableLogging: false });
+const client = await connectRedis();
+const access_token = await client.get("FYERS_TOKEN");
 
 fyers.setAppId(process.env.client_id);
 fyers.setRedirectUrl(process.env.redirect_uri);
-fyers.setAccessToken(process.env.access_token);
+fyers.setAccessToken(access_token);
 
 function formatDate(d) {
     const yyyy = d.getFullYear();
@@ -60,7 +62,7 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
                 underlying,
                 timeframe: timeframeStr,
                 timestamp: Number(timestamp),
-                date: new Date(Number(timestamp) * 1000),
+                date: new Date(Number(timestamp) * 1000 + 5.5 * 60 * 60 * 1000), // Convert UTC to IST (UTC+5:30)
                 open: Number(open),
                 high: Number(high),
                 low: Number(low),
@@ -90,11 +92,11 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
  * @param {String} symbol - Index/Stock symbol (e.g., "NSE:NIFTY50-INDEX" or "NSE:SBIN-EQ")
  * @param {String} startDateStr - Start date (YYYY-MM-DD)
  * @param {String} endDateStr - End date (YYYY-MM-DD)
+ * @param {String} dateFormat -date_format is a boolean flag. 0 to enter the epoch value. Eg:670073472. 1 to enter the date format as yyyy-mm-dd. Eg: 2023-11-29    
  * @param {String} timeframe - Candle timeframe in minutes (default: "5")
  */
-export async function saveHistoricalData(symbol, startDateStr, endDateStr, timeframe = "5") {
+export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateFormat, timeframe) {
     try {
-        await connectDB();
         const start = new Date(startDateStr);
         const end = new Date(endDateStr);
 
@@ -116,13 +118,13 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, timef
             chunkEnd.setDate(chunkEnd.getDate() - 1);
             if (chunkEnd > end) chunkEnd = new Date(end);
 
-            const range_from = formatDate(chunkStart);
-            const range_to = formatDate(chunkEnd);
+            const range_from = dateFormat == 0 ? Math.floor(chunkStart.getTime()).toString() : formatDate(chunkStart);
+            const range_to = dateFormat == 0 ? Math.floor(chunkEnd.getTime()).toString() : formatDate(chunkEnd);
 
             let inp = {
                 symbol: symbol,
                 resolution: timeframe,
-                date_format: "1",
+                date_format: dateFormat,
                 range_from: range_from,
                 range_to: range_to,
                 cont_flag: "1",
@@ -131,6 +133,8 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, timef
             try {
                 console.log(`Fetching ${symbol} data for ${range_from} to ${range_to}`);
                 const response = await fyers.getHistory(inp);
+                // console.log(response);
+                
                 const { saved, errors } = await saveIndexOrStockCandles(response, symbol, timeframe);
 
                 totalSaved += saved;
@@ -150,9 +154,6 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, timef
         return { totalSaved, totalErrors };
     } catch (error) {
         console.error("Error in saveHistoricalData:", error.message);
-    }
-    finally {
-        await disconnectDB();
     }
 }
 

@@ -5,7 +5,7 @@ dotenv.config();
 
 let isConnected = false;
 
-async function connectDB() {
+export async function connectDB() {
   if (isConnected) return;
 
   const mongoDbName = "AI_Analysis";
@@ -29,8 +29,8 @@ async function connectDB() {
  
 
   const options = {   
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    // useNewUrlParser: true,
+    // useUnifiedTopology: true,
     connectTimeoutMS: 30000,
     socketTimeoutMS: 30000,
     serverSelectionTimeoutMS: 30000,
@@ -62,4 +62,13 @@ async function connectDB() {
   }
 }
 
-export default connectDB;
+export async function disconnectDB() {
+  try {
+    await mongoose.disconnect();
+    isConnected = false;
+    console.log("Disconnected from MongoDB");
+  } catch (error) {
+    console.error("Error disconnecting from database:", error.message);
+    throw error;
+  }
+}

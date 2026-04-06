@@ -130,7 +130,7 @@ async function buildPullBackStg(data) {
             "tradeType": "B",
             "optionType": side,
             "strikeSelectionType": "Atm",
-            "strikeSelectionValue": "0",
+            "strikeSelectionValue": "-2",
             "waitTrade": null,
             "vwapWaitTrade": null,
             "underlyingWaitTrade": null,

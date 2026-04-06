@@ -47,7 +47,7 @@ export async function getStgName(name) {
         const strategyList = response.data.data || [];
         const existingNames = strategyList.map(stg => stg.name);
 
-        logger.info("Existing strategies:", existingNames);
+        logger.info("Existing strategies:", existingNames.length);
 
         // Check if the original name exists
         if (!existingNames.includes(name)) {

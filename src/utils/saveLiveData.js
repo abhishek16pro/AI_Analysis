@@ -7,7 +7,7 @@ import { emitter, channels } from './eventEmitter.js';
 export const getEpochRange = (minutes) => {
     const now = new Date();
     now.setSeconds(0, 0); // 🔥 force seconds = 0
-    const end = Math.floor(now.getTime() / 1000);
+    const end = Math.floor(now.getTime() / 1000) - 1; // use last completed second
     return { start: end - minutes * 60, end };
 };
 

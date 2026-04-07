@@ -14,6 +14,3 @@ fyers.generate_access_token({ "client_id": process.env.client_id, "secret_key": 
         console.log("error generating access token", response)
     }
 })
-
-// let auth url
-const url = `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=ET8HI9NURM-100&redirect_uri=https://www.google.com&response_type=code&state=sample_state`

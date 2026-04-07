@@ -1,6 +1,7 @@
 import { fyersModel } from "fyers-api-v3";
 import Candle from "../../models/candle.js";
 import connectRedis from "../utils/connectRedis.js";
+import logger from "../utils/logger.js";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -37,7 +38,7 @@ function formatDate(d) {
  */
 async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
     if (!response || !response.candles || !Array.isArray(response.candles)) {
-        console.warn("Invalid response format or no candles data");
+        logger.warn("Invalid response format or no candles data");
         return { saved: 0, errors: 0 };
     }
 
@@ -78,12 +79,12 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
                 duplicates++;
             } else {
                 errors++;
-                console.error(`Error saving candle for ${symbol}:`, error.message);
+                logger.error(`Error saving candle for ${symbol}:`, error.message);
             }
         }
     }
 
-    console.log(`Saved: ${saved}, Duplicates (skipped): ${duplicates}, Errors: ${errors} for ${symbol} (${timeframeStr})`);
+    logger.info(`Saved: ${saved}, Duplicates (skipped): ${duplicates}, Errors: ${errors} for ${symbol} (${timeframeStr})`);
     return { saved, errors };
 }
 
@@ -103,7 +104,7 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
         if (isNaN(start) || isNaN(end) || start > end) throw new Error("Invalid start or end date");
 
 
-        console.log(`Fetching ${symbol} data from ${startDateStr} to ${endDateStr} (timeframe: ${timeframe}m)`);
+        logger.info(`Fetching ${symbol} data from ${startDateStr} to ${endDateStr} (timeframe: ${timeframe}m)`);
 
         let cursor = new Date(start);
         let totalSaved = 0;
@@ -131,16 +132,16 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
             };
 
             try {
-                console.log(`Fetching ${symbol} data for ${range_from} to ${range_to}`);
+                logger.info(`Fetching ${symbol} data for ${range_from} to ${range_to}`);
                 const response = await fyers.getHistory(inp);
-                // console.log(response);
+                // logger.info(`Response for ${symbol} data:`, response);
                 
                 const { saved, errors } = await saveIndexOrStockCandles(response, symbol, timeframe);
 
                 totalSaved += saved;
                 totalErrors += errors;
             } catch (err) {
-                console.error(`Error fetching ${symbol} data for ${range_from} to ${range_to}:`, err.message);
+                logger.error(`Error fetching ${symbol} data for ${range_from} to ${range_to}:`, err.message);
                 totalErrors++;
             }
 
@@ -148,12 +149,12 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
             await new Promise((r) => setTimeout(r, 250));
         }
 
-        console.log(
+        logger.info(
             `Data fetch complete for ${symbol}. Total saved: ${totalSaved}, Total errors: ${totalErrors}`
         );
         return { totalSaved, totalErrors };
     } catch (error) {
-        console.error("Error in saveHistoricalData:", error.message);
+        logger.error("Error in saveHistoricalData:", error.message);
     }
 }
 

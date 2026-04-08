@@ -4,8 +4,8 @@ import connectRedis from "../utils/connectRedis.js";
 import logger from "../utils/logger.js";
 import dotenv from "dotenv";
 import { indexMapping } from "../utils/constant.js";
-import { saveLog } from "../utils/saveLogs.js";
 dotenv.config();
+import { saveLog } from "../utils/saveLogs.js";
 
 var fyers = new fyersModel({ enableLogging: false });
 const client = await connectRedis();

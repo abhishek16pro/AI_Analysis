@@ -110,12 +110,12 @@ async function runIfMarketOpen(marketStart, marketEnd, interval = null) {
     const now = new Date();
 
     if (now < marketStart) {
-        logger.info("Waiting for market open", { now: now.toLocaleString(), marketStart: marketStart.toLocaleString() });
+        // logger.info("Waiting for market open", { now: now.toLocaleString(), marketStart: marketStart.toLocaleString() });
         return;
     }
 
     if (now > marketEnd) {
-        logger.info("Market closed, stopping scheduler", { now: now.toLocaleString(), marketEnd: marketEnd.toLocaleString() });
+        // logger.info("Market closed, stopping scheduler", { now: now.toLocaleString(), marketEnd: marketEnd.toLocaleString() });
         if (interval) clearInterval(interval);
         return;
     }

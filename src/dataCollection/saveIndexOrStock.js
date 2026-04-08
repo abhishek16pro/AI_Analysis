@@ -5,7 +5,6 @@ import logger from "../utils/logger.js";
 import dotenv from "dotenv";
 import { indexMapping } from "../utils/constant.js";
 dotenv.config();
-import { saveLog } from "../utils/saveLogs.js";
 
 var fyers = new fyersModel({ enableLogging: false });
 const client = await connectRedis();
@@ -41,7 +40,6 @@ function formatDate(d) {
 async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
     if (!response || !response.candles || !Array.isArray(response.candles)) {
         logger.warn("Invalid response format or no candles data");
-        saveLog(symbol, "WARN", `Invalid response format or no candles data for ${symbol}`);
         return { saved: 0, errors: 0 };
     }
 
@@ -83,7 +81,6 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
             } else {
                 errors++;
                 logger.error(`Error saving candle for ${symbol}:`, error.message);
-                saveLog(symbol, "ERROR", `Error saving candle for ${symbol}: ${error.message}`);
             }
         }
     }
@@ -146,7 +143,6 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
                 totalErrors += errors;
             } catch (err) {
                 logger.error(`Error fetching ${symbol} data for ${range_from} to ${range_to}:`, err.message);
-                saveLog(symbol, "ERROR", `Error fetching ${symbol} data for ${range_from} to ${range_to}: ${err.message}`);
                 totalErrors++;
             }
 
@@ -160,7 +156,6 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
         return { totalSaved, totalErrors };
     } catch (error) {
         logger.error("Error in saveHistoricalData:", error.message);
-        saveLog(symbol, "ERROR", `Error in saveHistoricalData for ${symbol}: ${error.message}`);
     }
 }
 

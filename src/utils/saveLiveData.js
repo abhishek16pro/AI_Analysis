@@ -4,13 +4,47 @@ import { applyEmaUsingReqCandles } from './applyEMA.js';
 import logger from './logger.js';
 import { emitter, channels } from './eventEmitter.js';
 
-export const getEpochRange = (minutes) => {
-    const now = new Date();
-    now.setSeconds(0, 0);
-    const start = Math.floor(now.getTime() / 1000) - 2 * minutes * 60;
-    const end = Math.floor(now.getTime() / 1000) - minutes * 60;
-    return { start, end};
-};
+export function getEpochRange(timeframeMin) {
+    const timeframeSec = timeframeMin * 60;
+
+    // Current time in seconds
+    const now = Math.floor(new Date().getTime() / 1000);
+
+    // ===== MARKET START (Today 09:15 IST) =====
+    const nowDate = new Date();
+    const marketStart = new Date(
+        nowDate.getFullYear(),
+        nowDate.getMonth(),
+        nowDate.getDate(),
+        9,
+        15,
+        0,
+        0
+    );
+
+    const marketStartEpoch = Math.floor(marketStart.getTime() / 1000);
+
+    // ❌ Before market open
+    if (now < marketStartEpoch) return null;
+
+    // ===== Time passed since market open =====
+    const elapsed = now - marketStartEpoch;
+
+    // ===== Number of FULL candles formed =====
+    const completedCandles = Math.floor(elapsed / timeframeSec);
+
+    // ❌ No candle completed yet
+    if (completedCandles <= 0) return null;
+
+    // ===== Last completed candle =====
+    const endEpoch = marketStartEpoch + completedCandles * timeframeSec - 1;
+    const startEpoch = endEpoch - timeframeSec + 1;
+
+    return {
+        startEpoch,
+        endEpoch,
+    };
+}
 
 export async function saveLiveCandle() {
     try {
@@ -18,10 +52,15 @@ export async function saveLiveCandle() {
             const tfInt = parseInt(tf);
             for (const symbol of symbols) {
 
-                let { start, end } = getEpochRange(tfInt);
-                logger.info('saveLiveCandle - range', { symbol, timeframe: `${tf}m`, start, end });
+                let { startEpoch, endEpoch } = getEpochRange(tfInt);
+                if (!startEpoch || !endEpoch) {
+                    logger.info('saveLiveCandle - No valid range', { symbol, timeframe: `${tf}m` });
+                    continue;
+                }
 
-                await saveHistoricalData(indexMapping[symbol], start, end, '0', tf);
+                logger.info('saveLiveCandle - range', { symbol, timeframe: `${tf}m`, startEpoch, endEpoch });
+
+                await saveHistoricalData(indexMapping[symbol], startEpoch, endEpoch, '0', tf);
                 for (const ema of supportedEma) {
                     await applyEmaUsingReqCandles(symbol, `${tf}m`, ema);
                 }
@@ -35,8 +74,6 @@ export async function saveLiveCandle() {
 }
 
 export function startMarketScheduler() {
-    // temp changes 
-    // emitter.emit(channels.DATA_SAVED);
 
     const marketStart = new Date();
     marketStart.setHours(9, 15, 0, 0);

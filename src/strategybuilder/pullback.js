@@ -1,6 +1,5 @@
 import { emitter, channels } from "../utils/eventEmitter.js"
-import { addStrategy, getStgName, triggerStg, getUnderLying } from "../utils/robowriterHelper.js";
-import { indexMapping } from "../utils/constant.js";
+import { addStrategy, getStgName, triggerStg } from "../utils/robowriterHelper.js";
 import logger from '../utils/logger.js';
 
 emitter.on(channels.PULLBACK_STRATEGY, async (data) => {
@@ -33,7 +32,7 @@ async function buildPullBackStg(data) {
     });
 
     let baseStg = {
-        "index": indexMapping[data.stg.index],
+        "index": data.stg.index,
         "name": name,
         "tag": "DMC",
         "type": "TimeWise",
@@ -130,7 +129,7 @@ async function buildPullBackStg(data) {
             "tradeType": "B",
             "optionType": side,
             "strikeSelectionType": "Atm",
-            "strikeSelectionValue": "-2",
+            "strikeSelectionValue": "0",
             "waitTrade": null,
             "vwapWaitTrade": null,
             "underlyingWaitTrade": null,
@@ -155,6 +154,39 @@ async function buildPullBackStg(data) {
             "onTakeProfitSqoff": [],
             "onStartAction": [],
             "onStartExecute": [],
+            "onStartSqoff": []
+        },
+        "leg2": {
+            "added": true,
+            "idle": false,
+            "lot": 1,
+            "tradeType": "S",
+            "optionType": "PE",
+            "strikeSelectionType": "Atm",
+            "strikeSelectionValue": "0",
+            "waitTrade": null,
+            "vwapWaitTrade": null,
+            "underlyingWaitTrade": null,
+            "targetType": "underlyingpoints",
+            "targetValue": `${parseInt(data.target)}`,
+            "sLType": "underlyingpoints",
+            "sLValue": `${parseInt(data.stoploss)}`,
+            "wtCandleClose": 0,
+            "rexCandleCloseTime": 0,
+            "trailAfter": null,
+            "trailBy": null,
+            "onTargetType": "None",
+            "onTargetValue": [],
+            "onTargetTimes": 0,
+            "onSLType": "None",
+            "onSLValue": [],
+            "onSLTimes": 0,
+            "legDelay": 0,
+            "onStopLossExecute": [],
+            "onStopLossSqoff": [],
+            "onTakeProfitExecute": [],
+            "onTakeProfitSqoff": [],
+            "onStartAction": [],
             "onStartSqoff": []
         }
     }

@@ -135,7 +135,7 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
             try {
                 logger.info(`Fetching ${symbol} data for ${range_from} to ${range_to}`);
                 const response = await fyers.getHistory(inp);
-                logger.info(`Response for ${symbol} data:`, response);
+                // logger.info(`Response for ${symbol} data:`, response);
 
                 const { saved, errors } = await saveIndexOrStockCandles(response, symbol, timeframe);
 

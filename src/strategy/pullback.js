@@ -13,13 +13,11 @@ export async function runPullbackStrategy(stg) {
     let pullBackSignal = null;
 
     const currentTime = Math.floor(new Date() / 1000);
-    logger.info(currentTime);
-
 
     const limit = Math.max(stg.slCandles, stg.filter.candlesLookback);
     const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
-    logger.info("Timeframe 1 Candles:", t1);
+    logger.info("Timeframe 1 Candles:", t1[0]);
     // logger.info("Timeframe 2 Candles:", t2[0]);
 
     if (t1.length < limit || t2.length < limit) return stg
@@ -55,13 +53,18 @@ export async function runPullbackStrategy(stg) {
     else pullBackSignal = t1[0].high >= t1[0][`ema${stg.crossOver === "ema1" ? stg.ema1 : stg.ema2}`];
 
     logger.info("Pullback Signal", pullBackSignal);
-    if (pullBackSignal) return stg;
+    if (!pullBackSignal) return stg;
 
     logger.info("All conditions met. Triggering strategy.");
     logger.info("Treand:", trend, "PullBackSignal:", pullBackSignal, "EMA Gap T1:", emaGapT1);
 
-
     stg.log = stg.log || {};
+
+    // Add delta check for current chandle toches the ema2 or not
+    const isEma2 = (trend === "UP" && t1[0].low <= t1[0][`ema${stg.ema2}`]) || (trend === "DOWN" && t1[0].high >= t1[0][`ema${stg.ema2}`]);
+    stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
+    logger.info("DeltaCheckon updated to", stg.log.deltaCheckon);
+
 
     stg.log.trend = trend;
     stg.log.isTriggered = true;
@@ -90,19 +93,39 @@ export async function runPullbackStrategy(stg) {
 export async function afterTrigger(stg) {
   try {
     logger.info("Running afterTrigger");
-    // logger.info(stg);
-    const currentTime = Math.floor(new Date() / 1000);
     let isReset = false;
+    const currentTime = Math.floor(new Date() / 1000);
 
-    const latestCandles = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(stg.slCandles);
+    const limit = Math.max(stg.slCandles, stg.filter.candlesLookback);
+    const latestCandles = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     logger.info(latestCandles[0]);
 
+    // Add delta check for current chandle toches the ema2 or not
+    if (stg.log.deltaCheckon === 'ema1') {
+      const isEma2 = (stg.log.trend === "UP" && latestCandles[0].low <= latestCandles[0][`ema${stg.ema2}`]) || (stg.log.trend === "DOWN" && latestCandles[0].high >= latestCandles[0][`ema${stg.ema2}`]);
+      if (isEma2) {
+        stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
+        logger.info("DeltaCheckon updated to", stg.log.deltaCheckon);
+
+        await DynamicStg.findOneAndUpdate(
+          { _id: stg._id },
+          { $set: stg },
+          { returnDocument: 'after' }
+        );
+      }
+    }
+
     if (stg.log.trend === "UP") {
-      let high = Math.max(stg.log.triggeredCandleInfo.open, stg.log.triggeredCandleInfo.close);
-      if (latestCandles[0].close > high) {
+      if (latestCandles[0].close > stg.log.triggeredCandleInfo.high) {
+
+        const emaArray = latestCandles.slice(0, 6).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
+        const emaCheck = emaArray.slice(1).filter((v, i) => v < emaArray[i]).length >= stg.filter.candleJusity;
+        logger.info("EMA validation check", emaCheck, emaArray);
         logger.info("Hit Portfolio for", stg.name, stg.log.trend, "removing logs for next run!");
+        if (!emaCheck) return stg;
+
         isReset = true;
-        const minUnderlying = Math.min(...latestCandles.map(c => c.low));
+        const minUnderlying = Math.min(...latestCandles.slice(0, stg.slCandles).map(c => c.low));
         const stoploss = latestCandles[0].close - minUnderlying;
         const target = stoploss * stg.targetMultiplier;
         logger.info("SLTG", { stoploss, target });
@@ -110,12 +133,16 @@ export async function afterTrigger(stg) {
       }
     }
     else if (stg.log.trend === "DOWN") {
-      let low = Math.min(stg.log.triggeredCandleInfo.open, stg.log.triggeredCandleInfo.close);
-      if (latestCandles[0].close < low) {
+      if (latestCandles[0].close < stg.log.triggeredCandleInfo.low) {
+        const emaArray = latestCandles.slice(0, 6).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
+        const emaCheck = emaArray.slice(1).filter((v, i) => v > emaArray[i]).length >= stg.filter.candleJusity;
+        logger.info("EMA validation check", emaCheck, emaArray);
         logger.info("Hit Portfolio for", stg.name, stg.log.trend, "removing logs for next run!");
+        if (!emaCheck) return stg;
+
         isReset = true;
-        const maxUnderlying = Math.max(...latestCandles.map(c => c.high));
-        const stoploss = maxUnderlying - latestCandles[0].close
+        const maxUnderlying = Math.max(...latestCandles.slice(0, stg.slCandles).map(c => c.high));
+        const stoploss = maxUnderlying - latestCandles[0].close;
         const target = stoploss * stg.targetMultiplier;
         logger.info("SLTG", { stoploss, target });
         emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });

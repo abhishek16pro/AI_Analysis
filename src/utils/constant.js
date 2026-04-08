@@ -1,4 +1,4 @@
-// export const timeframes = ["10"]   // In mins
+// export const timeframes = ["1", "2", "3", "5", "10", "15", "30"]   // In mins
 // export const supportedEma = [10]
 // export const symbols = ["NIFTY"]
 

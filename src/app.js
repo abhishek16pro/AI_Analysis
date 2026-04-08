@@ -33,7 +33,7 @@ async function startApp() {
     // Listen for data save completion event
     emitter.on(channels.DATA_SAVED, async () => {
         console.log("📊 Data saved successfully, running strategies...");
-        // await executeStrategies();
+        await executeStrategies();
     });
 
     startMarketScheduler();

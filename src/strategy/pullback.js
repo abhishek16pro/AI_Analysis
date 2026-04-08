@@ -19,8 +19,8 @@ export async function runPullbackStrategy(stg) {
     const limit = Math.max(stg.slCandles, stg.filter.candlesLookback);
     const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
-    logger.info("Timeframe 1 Candles:", t1[0]);
-    logger.info("Timeframe 2 Candles:", t2[0]);
+    logger.info("Timeframe 1 Candles:", t1);
+    // logger.info("Timeframe 2 Candles:", t2[0]);
 
     if (t1.length < limit || t2.length < limit) return stg
 
@@ -55,18 +55,10 @@ export async function runPullbackStrategy(stg) {
     else pullBackSignal = t1[0].high >= t1[0][`ema${stg.crossOver === "ema1" ? stg.ema1 : stg.ema2}`];
 
     logger.info("Pullback Signal", pullBackSignal);
-    if (!pullBackSignal) return stg;
-
-    let emaDeltaArray = t1.slice(0, -1).map((c, i) => c[`ema${stg.ema1}`] - t1[i + 1][`ema${stg.ema1}`]);
-
-    // Check for EMA delta confirmation
-    const emaDeltaConfirmation = Math.max(emaDeltaArray.filter(v => v > 0).length, emaDeltaArray.filter(v => v < 0).length) >= stg.filter.candleJusity;
-
-    logger.info("EMA Delta Confirmation", emaDeltaConfirmation);
-    if (!emaDeltaConfirmation) return stg;
+    if (pullBackSignal) return stg;
 
     logger.info("All conditions met. Triggering strategy.");
-    logger.info("Treand:", trend, "PullBackSignal:", pullBackSignal, "EMA Gap T1:", emaGapT1, "EMA Delta Confirmation:", emaDeltaConfirmation);
+    logger.info("Treand:", trend, "PullBackSignal:", pullBackSignal, "EMA Gap T1:", emaGapT1);
 
 
     stg.log = stg.log || {};

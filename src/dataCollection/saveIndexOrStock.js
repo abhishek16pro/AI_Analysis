@@ -3,6 +3,7 @@ import Candle from "../../models/candle.js";
 import connectRedis from "../utils/connectRedis.js";
 import logger from "../utils/logger.js";
 import dotenv from "dotenv";
+import { indexMapping } from "../utils/constant.js";
 dotenv.config();
 
 var fyers = new fyersModel({ enableLogging: false });
@@ -57,7 +58,7 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
             const [timestamp, open, high, low, close, volume] = candle;
 
             const candleDoc = {
-                symbol,
+                symbol: indexMapping[symbol] || symbol,
                 exchange,
                 instrument,
                 underlying,
@@ -134,8 +135,8 @@ export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateF
             try {
                 logger.info(`Fetching ${symbol} data for ${range_from} to ${range_to}`);
                 const response = await fyers.getHistory(inp);
-                // logger.info(`Response for ${symbol} data:`, response);
-                
+                logger.info(`Response for ${symbol} data:`, response);
+
                 const { saved, errors } = await saveIndexOrStockCandles(response, symbol, timeframe);
 
                 totalSaved += saved;

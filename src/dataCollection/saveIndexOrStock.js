@@ -6,14 +6,6 @@ import dotenv from "dotenv";
 import { indexMapping } from "../utils/constant.js";
 dotenv.config();
 
-var fyers = new fyersModel({ enableLogging: false });
-const client = await connectRedis();
-const access_token = await client.get("FYERS_TOKEN");
-
-fyers.setAppId(process.env.client_id);
-fyers.setRedirectUrl(process.env.redirect_uri);
-fyers.setAccessToken(access_token);
-
 function formatDate(d) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -99,6 +91,15 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
  */
 export async function saveHistoricalData(symbol, startDateStr, endDateStr, dateFormat, timeframe) {
     try {
+
+        var fyers = new fyersModel({ enableLogging: false });
+        const client = await connectRedis();
+        const access_token = await client.get("FYERS_TOKEN");
+
+        fyers.setAppId(process.env.client_id);
+        fyers.setRedirectUrl(process.env.redirect_uri);
+        fyers.setAccessToken(access_token);
+
         const start = new Date(startDateStr);
         const end = new Date(endDateStr);
 

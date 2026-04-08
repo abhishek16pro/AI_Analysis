@@ -2,7 +2,6 @@ import Candle from "../../models/candle.js";
 import DynamicStg from '../../models/dynamicStg.js';
 import logger from "../utils/logger.js";
 import { emitter, channels } from "../utils/eventEmitter.js";
-import { saveLog } from "../utils/saveLogs.js";
 
 export async function runPullbackStrategy(stg) {
   try {
@@ -77,7 +76,7 @@ export async function runPullbackStrategy(stg) {
       close: t1[0].close,
     };
 
-    saveLog(stg.name, "INFO", `Pullback strategy triggered for ${stg.index} in ${trend} trend`);
+    logger.info(stg.name, "INFO", `Pullback strategy triggered for ${stg.index} in ${trend} trend`);
 
     await DynamicStg.findOneAndUpdate(
       { _id: stg._id },
@@ -88,7 +87,6 @@ export async function runPullbackStrategy(stg) {
 
   } catch (error) {
     logger.warn("Error in runPullbackStrategy:", error);
-    saveLog(stg?.name || "Unknown", "ERROR", `Error in runPullbackStrategy: ${error.message}`);
     return stg;
   }
 }
@@ -131,7 +129,7 @@ export async function afterTrigger(stg) {
         const minUnderlying = Math.min(...latestCandles.slice(0, stg.slCandles).map(c => c.low));
         const stoploss = latestCandles[0].close - minUnderlying;
         const target = stoploss * stg.targetMultiplier;
-        saveLog(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
+        logger.info(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
         emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
       }
     }
@@ -147,7 +145,7 @@ export async function afterTrigger(stg) {
         const maxUnderlying = Math.max(...latestCandles.slice(0, stg.slCandles).map(c => c.high));
         const stoploss = maxUnderlying - latestCandles[0].close;
         const target = stoploss * stg.targetMultiplier;
-        saveLog(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
+        logger.info(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
         emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
       }
     }
@@ -165,6 +163,5 @@ export async function afterTrigger(stg) {
 
   } catch (error) {
     logger.warn("Error in afterTrigger:", error);
-    saveLog(stg?.name || "Unknown", "ERROR", `Error in afterTrigger: ${error.message}`);
   }
 }

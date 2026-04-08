@@ -1,4 +1,4 @@
-import connectRedis from "./redisConnect.js";
+import connectRedis from "./connectRedis.js";
 const client = await connectRedis();
 
 export const saveLog = async (name, type, msg) => {

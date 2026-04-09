@@ -20,10 +20,11 @@ async function runPullbackStrategy(data) {
     }
 }
 
-async function buildPullBackStg(data) {
+export async function buildPullBackStg(data) {
     logger.info({ data })
     const name = await getStgName(data.stg.name)
-    const side = data.stg.log.trend === "DOWN" ? "PE" : "CE"
+    const side1 = data.stg.log.trend === "DOWN" ? "PE" : "CE"
+    const side2 = data.stg.log.trend === "DOWN" ? "CE" : "PE"
     const startTime = new Date().toLocaleTimeString('en-GB', {
         hour12: false,
         hour: '2-digit',
@@ -127,7 +128,7 @@ async function buildPullBackStg(data) {
             "idle": false,
             "lot": 1,
             "tradeType": "B",
-            "optionType": side,
+            "optionType": side1,
             "strikeSelectionType": "Atm",
             "strikeSelectionValue": "0",
             "waitTrade": null,
@@ -161,7 +162,7 @@ async function buildPullBackStg(data) {
             "idle": false,
             "lot": 1,
             "tradeType": "S",
-            "optionType": "PE",
+            "optionType": side2,
             "strikeSelectionType": "Atm",
             "strikeSelectionValue": "0",
             "waitTrade": null,

@@ -8,7 +8,7 @@ let isConnected = false;
 export async function connectDB() {
   if (isConnected) return;
 
-  const mongoDbName = "AI_Analysis";
+  const mongoDbName = process.env.MONGODB_NAME || "XTS";
   const serverIp = "localhost";
   const isDev = process.argv.includes("--dev");
 

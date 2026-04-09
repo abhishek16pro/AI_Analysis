@@ -1,6 +1,6 @@
 import { saveHistoricalData } from './src/dataCollection/saveIndexOrStock.js'
 import { applyEmaUsingAllCandles } from './src/utils/applyEMA.js'
-import { connectDB, disconnectDB } from './src/utils/connectDB.js'
+import { connectDB } from './src/utils/connectDB.js'
 import { timeframes, supportedEma, symbols, indexMapping } from './src/utils/constant.js'
 
 

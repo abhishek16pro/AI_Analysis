@@ -13,22 +13,6 @@ function formatDate(d) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-/**
- * Save index or stock candles data to MongoDB
- * Format: {
- *   "symbol": "NSE:NIFTY50-INDEX",
- *   "exchange": "NSE",
- *   "instrument": "INDEX",
- *   "underlying": "NIFTY",
- *   "timeframe": "5m",
- *   "timestamp": 1707904500,
- *   "open": 22500,
- *   "high": 22520,
- *   "low": 22490,
- *   "close": 22510,
- *   "volume": 0
- * }
- */
 async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
     if (!response || !response.candles || !Array.isArray(response.candles)) {
         logger.warn("Invalid response format or no candles data");
@@ -64,16 +48,26 @@ async function saveIndexOrStockCandles(response, symbol, timeframe = "5") {
                 volume: Number(volume) || 0,
             };
 
-            await Candle.insertOne(candleDoc);
-            saved++;
-        } catch (error) {
-            if (error.code === 11000) {
-                // Duplicate key error - skip silently
-                duplicates++;
-            } else {
-                errors++;
-                logger.error(`Error saving candle for ${symbol}:`, error.message);
+            const filter = {
+                symbol: candleDoc.symbol,
+                exchange: candleDoc.exchange,
+                timeframe: candleDoc.timeframe,
+                timestamp: candleDoc.timestamp,
+            };
+
+            const update = {
+                $set: candleDoc,
+            };
+
+            const result = await Candle.updateOne(filter, update, { upsert: true });
+            if (result.upsertedCount === 1) {
+                saved++;
+            } else if (result.matchedCount === 1) {
+                saved++;
             }
+        } catch (error) {
+            errors++;
+            logger.error(`Error saving candle for ${symbol}:`, error.message);
         }
     }
 

@@ -79,7 +79,7 @@ export function startMarketScheduler() {
     marketStart.setHours(9, 15, 0, 0);
 
     const marketEnd = new Date();
-    marketEnd.setHours(15, 30, 0, 0);
+    marketEnd.setHours(15, 31, 0, 0);
 
     const now = new Date();
 

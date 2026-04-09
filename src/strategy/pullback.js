@@ -45,25 +45,25 @@ export async function runPullbackStrategy(stg) {
     if (t1FirstEMA > t1SecondEMA && t2FirstEMA > t2SecondEMA) trend = "UP";
     else if (t1FirstEMA < t1SecondEMA && t2FirstEMA < t2SecondEMA) trend = "DOWN";
 
-    logger.info("Trend", trend);
+    logger.info("Trend", { trend });
     if (!trend) return stg;
 
     // Check for pullback on crossover EMA
     if (trend === "UP") pullBackSignal = t1[0].low <= t1[0][`ema${stg.crossOver === "ema1" ? stg.ema1 : stg.ema2}`];
     else pullBackSignal = t1[0].high >= t1[0][`ema${stg.crossOver === "ema1" ? stg.ema1 : stg.ema2}`];
 
-    logger.info("Pullback Signal", pullBackSignal);
+    logger.info("Pullback Signal", { pullBackSignal });
     if (!pullBackSignal) return stg;
 
     logger.info("All conditions met. Triggering strategy.");
-    logger.info("Treand:", trend, "PullBackSignal:", pullBackSignal, "EMA Gap T1:", emaGapT1);
+    logger.info("Trend:", { trend }, "PullBackSignal:", { pullBackSignal }, "EMA Gap T1:", { emaGapT1 });
 
     stg.log = stg.log || {};
 
     // Add delta check for current chandle toches the ema2 or not
     const isEma2 = (trend === "UP" && t1[0].low <= t1[0][`ema${stg.ema2}`]) || (trend === "DOWN" && t1[0].high >= t1[0][`ema${stg.ema2}`]);
     stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
-    logger.info("DeltaCheckon updated to", stg.log.deltaCheckon);
+    logger.info("DeltaCheckon updated to", { deltaCheckon: stg.log.deltaCheckon });
 
 
     stg.log.trend = trend;

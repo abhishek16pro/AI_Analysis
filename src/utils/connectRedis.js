@@ -5,6 +5,10 @@ let redisClient;
 async function connectRedis() {
   const isDev = process.argv.includes("--dev");
 
+  if (redisClient) {
+    return redisClient;
+  }
+
   if (isDev) {
     // Local Redis (default: localhost:6379, no password)
     redisClient = new Redis({

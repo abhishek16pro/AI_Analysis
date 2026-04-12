@@ -4,7 +4,7 @@ import { connectDB } from './src/utils/connectDB.js'
 import { timeframes, supportedEma, symbols, indexMapping } from './src/utils/constant.js'
 
 
-async function saveSingleHistorical() {
+export async function saveSingleHistorical() {
     try {
         await connectDB()
         const today = new Date().toISOString().split('T')[0];
@@ -22,4 +22,4 @@ async function saveSingleHistorical() {
     }
 }
 
-await saveSingleHistorical()
+// await saveSingleHistorical()

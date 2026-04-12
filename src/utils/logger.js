@@ -12,6 +12,12 @@ const getISTTime = () => {
   });
 };
 
+
+const getCurrentDate = () => {
+  const d = new Date();
+  return d.toISOString().split("T")[0]; // YYYY-MM-DD
+};
+
 // 👉 helper (for prod formatting)
 const formatArgs = (args) => {
   return args.map(arg => {
@@ -49,7 +55,7 @@ if (isDev) {
     format: winston.format.printf(({ message }) => message),
     transports: [
       new winston.transports.File({
-        filename: path.join(logDir, "app.log")
+        filename: path.join(logDir, `app-${getCurrentDate()}.log`)
       }),
       new winston.transports.Console()
     ]

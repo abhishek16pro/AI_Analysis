@@ -18,7 +18,7 @@ export async function runPullbackStrategy(stg) {
     const limit = Math.max(stg.slCandles, stg.candleLookback);
     const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
-    logger.info("Timeframe 1 Candles:", t1[0]);
+    // logger.info("Timeframe 1 Candles:", t1[0]);
     // logger.info("Timeframe 2 Candles:", t2[0]);
 
     if (t1.length < limit || t2.length < limit) return stg
@@ -30,8 +30,8 @@ export async function runPullbackStrategy(stg) {
     const t2FirstEMA = t2[0][`ema${stg.ema1}`]
     const t2SecondEMA = t2[0][`ema${stg.ema2}`]
 
-    logger.info("First timeframe EMA", { t1FirstEMA, t1SecondEMA });
-    logger.info("Second timeframe EMA", { t2FirstEMA, t2SecondEMA });
+    // logger.info("First timeframe EMA", { t1FirstEMA, t1SecondEMA });
+    // logger.info("Second timeframe EMA", { t2FirstEMA, t2SecondEMA });
 
     // Check for minimum EMA gap
     const threshold = typeof stg.emaGapThreshold === "string" && stg.emaGapThreshold.includes("%")
@@ -39,7 +39,7 @@ export async function runPullbackStrategy(stg) {
       : parseFloat(stg.emaGapThreshold);
 
     const emaGapT1 = Math.abs(t1FirstEMA - t1SecondEMA);
-    logger.info("Threshold status", { threshold, emaGapT1, isAboveThreshold: emaGapT1 >= threshold });
+    // logger.info("Threshold status", { threshold, emaGapT1, isAboveThreshold: emaGapT1 >= threshold });
     if (emaGapT1 < threshold) return stg;
 
     // Check for trend with both timeframes

@@ -10,6 +10,7 @@ emitter.on(channels.PULLBACK_STRATEGY, async (data) => {
 async function runPullbackStrategy(data) {
     try {
         const readyStg = await buildPullBackStg(data);
+        logger.info("Built strategy for pullback:", readyStg);
         let response = await addStrategy(readyStg);
         logger.info("Response from strategy execution:", response);
         let triggerResponse = await triggerStg(response); // Trigger the strategy
@@ -21,7 +22,6 @@ async function runPullbackStrategy(data) {
 }
 
 export async function buildPullBackStg(data) {
-    logger.info({ data })
     const name = await getStgName(data.stg.name)
     const side1 = data.stg.log.trend === "DOWN" ? "PE" : "CE"
     const side2 = data.stg.log.trend === "DOWN" ? "CE" : "PE"
@@ -35,7 +35,7 @@ export async function buildPullBackStg(data) {
     let baseStg = {
         "index": data.stg.index,
         "name": name,
-        "tag": "DMC",
+        "tag": data.stg.strategyTag,
         "type": "TimeWise",
         "orderType": null,
         "entryType": "Sl-Limit",
@@ -67,8 +67,8 @@ export async function buildPullBackStg(data) {
         "rexDelay": 0,
         "onCompletionExecuteDelay": 0,
         "startTime": startTime,
-        "endTime": "15:15:00",
-        "sqTime": "15:15:00",
+        "endTime": "15:25:00",
+        "sqTime": "15:25:00",
         "wtCandleClose": 0,
         "rexCandleCloseTime": 0,
         "upPortfolioOnSl": [],
@@ -129,8 +129,8 @@ export async function buildPullBackStg(data) {
             "lot": 1,
             "tradeType": "B",
             "optionType": side1,
-            "strikeSelectionType": "Atm",
-            "strikeSelectionValue": "0",
+            "strikeSelectionType": data.stg.legs[0].strikeSelectionType || "Atm",
+            "strikeSelectionValue": String(data.stg.legs[0].strikeSelectionValue) || "0",
             "waitTrade": null,
             "vwapWaitTrade": null,
             "underlyingWaitTrade": null,
@@ -163,8 +163,8 @@ export async function buildPullBackStg(data) {
             "lot": 1,
             "tradeType": "S",
             "optionType": side2,
-            "strikeSelectionType": "Atm",
-            "strikeSelectionValue": "0",
+            "strikeSelectionType": data.stg.legs[1].strikeSelectionType || "Atm",
+            "strikeSelectionValue": String(data.stg.legs[1].strikeSelectionValue) || "0",
             "waitTrade": null,
             "vwapWaitTrade": null,
             "underlyingWaitTrade": null,

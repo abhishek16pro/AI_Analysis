@@ -6,7 +6,7 @@ import { emitter, channels } from "../utils/eventEmitter.js";
 
 export async function runPullbackStrategy(stg) {
   try {
-    if (!stg || !stg.active) return stg;
+    if (!stg) return stg;
 
     if (stg?.log?.isPullback) return await afterTrigger(stg);
 
@@ -15,7 +15,7 @@ export async function runPullbackStrategy(stg) {
 
     const currentTime = Math.floor(new Date() / 1000);
 
-    const limit = Math.max(stg.slCandles, stg.candleLookback);
+    const limit = Math.max(parseInt(stg.slCandles), parseInt(stg.candleLookback));
     const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     // logger.info("Timeframe 1 Candles:", t1[0]);
@@ -60,7 +60,6 @@ export async function runPullbackStrategy(stg) {
     logger.info("Trend:", { trend }, "PullBackSignal:", { pullBackSignal }, "EMA Gap T1:", { emaGapT1 });
 
     stg.log = stg.log || {};
-
     // Add delta check for current chandle toches the ema2 or not
     const isEma2 = (trend === "UP" && t1[0].low <= t1[0][`ema${stg.ema2}`]) || (trend === "DOWN" && t1[0].high >= t1[0][`ema${stg.ema2}`]);
     stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
@@ -78,9 +77,6 @@ export async function runPullbackStrategy(stg) {
     };
 
     await updateStrategyInRedis(stg);
-
-    logger.info(stg.name, "INFO", `Pullback strategy triggered for ${stg.index} in ${trend} trend`);
-
     const updatedStg = await updateStrategyInDB(stg)
     return updatedStg;
 
@@ -94,18 +90,17 @@ export async function afterTrigger(stg) {
   try {
     logger.info("Running afterTrigger");
     const currentTime = Math.floor(new Date() / 1000);
-    let trend = null
 
-    const limit = Math.max(stg.slCandles, stg.candleLookback);
+    const limit = Math.max(parseInt(stg.slCandles), parseInt(stg.candleLookback));
     const latestCandleT1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     const latestCandleT2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
     // logger.info(latestCandleT1[0]);
 
-    // Add delta check for current chandle touches the ema2 or not
+    // Add delta check for current candle touches the ema2 or not
     if (stg.log.deltaCheckon === 'ema1') {
       const isEma2 = (stg.log.trend === "UP" && latestCandleT1[0].low <= latestCandleT1[0][`ema${stg.ema2}`]) || (stg.log.trend === "DOWN" && latestCandleT1[0].high >= latestCandleT1[0][`ema${stg.ema2}`]);
       if (isEma2) {
-        stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
+        stg.log.deltaCheckon = 'ema2';
         logger.info("DeltaCheckon updated to", stg.log.deltaCheckon);
 
         await updateStrategyInDB(stg);
@@ -113,94 +108,131 @@ export async function afterTrigger(stg) {
       }
     }
 
-    if (stg.log.trend === "UP") {
-      if (latestCandleT1[0].close > stg.log.pullbackCandleInfo.high) {
+    const isBullish = stg.log.trend === "UP";
+    const breakoutCondition = isBullish ? latestCandleT1[0].close > stg.log.pullbackCandleInfo.high : latestCandleT1[0].close < stg.log.pullbackCandleInfo.low;
 
-        // Checking if the candle which triggered the signal has ema1 > ema2 in both time fram
-        const t1FirstEMA = latestCandleT1[0][`ema${stg.ema1}`]
-        const t1SecondEMA = latestCandleT1[0][`ema${stg.ema2}`]
-        const t2FirstEMA = latestCandleT2[0][`ema${stg.ema1}`]
-        const t2SecondEMA = latestCandleT2[0][`ema${stg.ema2}`]
+    if (breakoutCondition) {
+      // Checking if the candle which triggered the signal has ema1 > ema2 in both timeframes
+      const t1FirstEMA = latestCandleT1[0][`ema${stg.ema1}`];
+      const t1SecondEMA = latestCandleT1[0][`ema${stg.ema2}`];
+      const t2FirstEMA = latestCandleT2[0][`ema${stg.ema1}`];
+      const t2SecondEMA = latestCandleT2[0][`ema${stg.ema2}`];
 
-        // Check for trend with both timeframes
-        if (t1FirstEMA > t1SecondEMA && t2FirstEMA > t2SecondEMA) trend = "UP";
-        if (!trend) {
-          logger.info("Trend is not in favour");
-          return stg;
-        }
+      // Check for trend with both timeframes
+      const trendCondition = isBullish ? (t1FirstEMA > t1SecondEMA && t2FirstEMA > t2SecondEMA) : (t1FirstEMA < t1SecondEMA && t2FirstEMA < t2SecondEMA);
 
-        const emaArray = latestCandleT1.slice(0, 6).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
-        const emaCheck = emaArray.slice(1).filter((v, i) => v < emaArray[i]).length >= stg.candleJustify;
-        logger.info("EMA validation check", emaCheck, emaArray);
-        if (!emaCheck) return stg;
-
-        const minUnderlying = Math.min(...latestCandleT1.slice(0, stg.slCandles).map(c => c.low));
-        const stoploss = latestCandleT1[0].close - minUnderlying;
-        const target = stoploss * stg.targetMultiplier;
-        logger.info(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
-        emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
+      if (!trendCondition) {
+        logger.info("Trend is not in favour");
+        return stg;
       }
-      else {
-        stg.log.pullbackCandleInfo = {
-          timestamp: latestCandleT1[0].timestamp,
-          open: latestCandleT1[0].open,
-          high: latestCandleT1[0].high,
-          low: latestCandleT1[0].low,
-          close: latestCandleT1[0].close,
-        };
-        console.log("Updating pullBack Candle", { timestamp: latestCandleT1[0].timestamp, open: latestCandleT1[0].open, high: latestCandleT1[0].high, low: latestCandleT1[0].low, close: latestCandleT1[0].close });
-        await updateStrategyInDB(stg);
-        await updateStrategyInRedis(stg);
+
+      const emaArray = latestCandleT1.slice(0, stg.candleLookback).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
+      const emaCheck = emaArray.slice(1).filter((v, i) => isBullish ? v < emaArray[i] : v > emaArray[i]).length >= stg.candleJustify;
+      logger.info("EMA validation check", emaCheck, emaArray);
+
+      if (!emaCheck) {
+        logger.info("EMA check failed. Not validating the signal.");
+        return stg;
       }
+
+      // Calculate stoploss
+      let stoploss;
+      if (isBullish) {
+        const minUnderlying = Math.min(...latestCandleT1.slice(0, parseInt(stg.slCandles)).map(c => c.low));
+        stoploss = latestCandleT1[0].close - minUnderlying;
+      } else {
+        const maxUnderlying = Math.max(...latestCandleT1.slice(0, parseInt(stg.slCandles)).map(c => c.high));
+        stoploss = maxUnderlying - latestCandleT1[0].close;
+      }
+
+      const target = stoploss * parseFloat(stg.targetMultiplier);
+      logger.info(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
+      
+      emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
+
+
+      stg.active = false;
+      stg.maxTrade -= 1;
+      await updateStrategyInDB(stg);
+      await updateStrategyInRedis(stg);
+      if (stg.maxTrade > 0) {
+        await reRunStrategy(stg);
+      }
+    } else {
+      // Update pullback candle info
+      stg.log.pullbackCandleInfo = {
+        timestamp: latestCandleT1[0].timestamp,
+        open: latestCandleT1[0].open,
+        high: latestCandleT1[0].high,
+        low: latestCandleT1[0].low,
+        close: latestCandleT1[0].close,
+      };
+      console.log("Updating pullBack Candle", {
+        timestamp: latestCandleT1[0].timestamp,
+        open: latestCandleT1[0].open,
+        high: latestCandleT1[0].high,
+        low: latestCandleT1[0].low,
+        close: latestCandleT1[0].close
+      });
+      await updateStrategyInDB(stg);
+      await updateStrategyInRedis(stg);
     }
 
-    else if (stg.log.trend === "DOWN") {
-      if (latestCandleT1[0].close < stg.log.pullbackCandleInfo.low) {
-
-        // Checking if the candle which triggered the signal has ema1 > ema2 in both time fram
-        const t1FirstEMA = latestCandleT1[0][`ema${stg.ema1}`]
-        const t1SecondEMA = latestCandleT1[0][`ema${stg.ema2}`]
-        const t2FirstEMA = latestCandleT2[0][`ema${stg.ema1}`]
-        const t2SecondEMA = latestCandleT2[0][`ema${stg.ema2}`]
-
-        // Check for trend with both timeframes
-        if (t1FirstEMA < t1SecondEMA && t2FirstEMA < t2SecondEMA) trend = "DOWN";
-        if (!trend) {
-          logger.info("Trend is not in favour");
-          return stg;
-        }
-
-        const emaArray = latestCandleT1.slice(0, 6).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
-        const emaCheck = emaArray.slice(1).filter((v, i) => v > emaArray[i]).length >= stg.candleJustify;
-        logger.info("EMA validation check", emaCheck, emaArray);
-        if (emaCheck) return stg;
-
-        const maxUnderlying = Math.max(...latestCandleT1.slice(0, stg.slCandles).map(c => c.high));
-        const stoploss = maxUnderlying - latestCandleT1[0].close;
-        const target = stoploss * stg.targetMultiplier;
-        logger.info(stg.name, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`);
-        emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
-      }
-      else { // iska mtlb candle ne low nhi diya hai, to update krdo pullback candle info
-        stg.log.pullbackCandleInfo = {
-          timestamp: latestCandleT1[0].timestamp,
-          open: latestCandleT1[0].open,
-          high: latestCandleT1[0].high,
-          low: latestCandleT1[0].low,
-          close: latestCandleT1[0].close,
-        };
-        console.log("Updating pullBack Candle", { timestamp: latestCandleT1[0].timestamp, open: latestCandleT1[0].open, high: latestCandleT1[0].high, low: latestCandleT1[0].low, close: latestCandleT1[0].close });
-        await updateStrategyInDB(stg);
-        await updateStrategyInRedis(stg);
-      }
-    }
-
-    return stg
+    return stg;
 
   } catch (error) {
     logger.warn("Error in afterTrigger:", error);
   }
 }
+
+async function reRunStrategy(stg) {
+  try {
+    if (stg.maxTrade <= 0) {
+      logger.info(`Max trade limit reached for strategy ${stg.name}. Not re-running.`);
+      return stg;
+    }
+    // Clone the strategy to create a new one
+    const newStg = JSON.parse(JSON.stringify(stg));
+
+    // Remove the ID to create a new document
+    delete newStg._id;
+
+    // Remove logs and set active to true
+    newStg.log = {};
+    newStg.active = true;
+
+    // Generate new name with suffix
+    const baseName = stg.name.replace(/_\d+$/, ''); // Remove existing suffix if present
+
+    // Find the highest existing suffix for this strategy
+    const existingStrategies = await DynamicStg.find({ name: new RegExp(`^${baseName}(_\\d+)?$`) });
+
+    let newSuffix = 1;
+    if (existingStrategies.length > 0) {
+      const suffixes = existingStrategies.map(s => {
+        const match = s.name.match(/_(\d+)$/);
+        return match ? parseInt(match[1]) : 0;
+      });
+      newSuffix = Math.max(...suffixes) + 1;
+    }
+
+    newStg.name = `${baseName}_${newSuffix}`;
+    logger.info(`Created new strategy version: ${newStg.name}`);
+
+    // Save new strategy to database
+    const savedStg = await DynamicStg.create(newStg);
+
+    // Push to Redis DMC array
+    const redisClient = await connectRedis();
+    await redisClient.rpush("DMC", JSON.stringify(savedStg));
+    logger.info(`Strategy ${newStg.name} pushed to Redis DMC array and saved to database`);
+
+    return savedStg;
+  } catch (error) {
+    logger.warn("Error in rerunStrategy:", error);
+  }
+}
+
 
 // Function to update the strategy in db
 export async function updateStrategyInDB(stg) {

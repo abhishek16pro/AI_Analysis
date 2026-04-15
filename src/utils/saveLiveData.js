@@ -69,7 +69,7 @@ export async function saveLiveCandle() {
         }
 
     } catch (error) {
-        console.log("Error:", error);
+        logger.error("Error:", error);
     }
 }
 
@@ -85,7 +85,7 @@ export function startMarketScheduler() {
 
     // ⛔ If market already closed
     if (now > marketEnd) {
-        console.log("❌ Market already closed");
+        logger.info("❌ Market already closed");
         return;
     }
 

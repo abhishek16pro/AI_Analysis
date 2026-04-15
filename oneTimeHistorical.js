@@ -11,7 +11,7 @@ export async function saveSingleHistorical() {
 
         for (const symbol of symbols) {
             for (const tf of timeframes) {
-                await saveHistoricalData(indexMapping[symbol], '2026-01-01', today, '1', tf)
+                await saveHistoricalData(indexMapping[symbol], '2026-04-01', today, '1', tf)
                 for (const ema of supportedEma) {
                     await applyEmaUsingAllCandles(symbol, `${tf}m`, ema)
                 }

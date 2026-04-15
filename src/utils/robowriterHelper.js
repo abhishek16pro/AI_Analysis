@@ -26,7 +26,7 @@ export async function addStrategy(strategy) {
         return response.data.data._id;
 
     } catch (error) {
-        logger.error("Error adding strategy:", error.response ? error.response.data : error.message);
+        logger.error("Error adding strategy:", error);
     }
 }
 

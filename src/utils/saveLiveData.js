@@ -52,11 +52,12 @@ export async function saveLiveCandle() {
             const tfInt = parseInt(tf);
             for (const symbol of symbols) {
 
-                let { startEpoch, endEpoch } = getEpochRange(tfInt);
-                if (!startEpoch || !endEpoch) {
+                const range = getEpochRange(tfInt);
+                if (!range) {
                     logger.info('saveLiveCandle - No valid range', { symbol, timeframe: `${tf}m` });
                     continue;
                 }
+                let { startEpoch, endEpoch } = range;
 
                 logger.info('saveLiveCandle - range', { symbol, timeframe: `${tf}m`, startEpoch, endEpoch });
 
@@ -69,7 +70,7 @@ export async function saveLiveCandle() {
         }
 
     } catch (error) {
-        logger.error("Error:", error);
+        logger.error("Error from save live candle:", error);
     }
 }
 

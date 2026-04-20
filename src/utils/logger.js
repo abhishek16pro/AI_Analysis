@@ -36,15 +36,31 @@ const formatArgs = (args) => {
 let logger;
 
 if (isDev) {
-  // ✅ DEV MODE → pure console.log
+  // ✅ DEV MODE → Winston with simple console
+  const baseLogger = winston.createLogger({
+    level: "info",
+    format: winston.format.combine(
+      winston.format.timestamp({ format: getISTTime }),
+      winston.format.printf(({ timestamp, level, message, ...meta }) => {
+        const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+        return `${timestamp} ${level.toUpperCase()}: ${message}${metaStr}`;
+      })
+    ),
+    transports: [new winston.transports.Console()]
+  });
+
   logger = {
-    info: (...args) => console.log(...args),
-    error: (...args) => console.error(...args),
-    warn: (...args) => console.warn(...args),
+    info: (message, meta = {}) => baseLogger.info(message, meta),
+    error: (message, meta = {}) => baseLogger.error(message, meta),
+    warn: (message, meta = {}) => baseLogger.warn(message, meta),
+    child: (defaultMeta) => ({
+      info: (message, meta = {}) => baseLogger.info(message, { ...defaultMeta, ...meta }),
+      error: (message, meta = {}) => baseLogger.error(message, { ...defaultMeta, ...meta }),
+      warn: (message, meta = {}) => baseLogger.warn(message, { ...defaultMeta, ...meta }),
+    })
   };
 } else {
-  // ✅ PROD MODE → Winston + file
-
+  // ✅ PROD MODE → Winston with JSON file and console
   const logDir = "logs";
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir);
@@ -52,24 +68,33 @@ if (isDev) {
 
   const baseLogger = winston.createLogger({
     level: "info",
-    format: winston.format.printf(({ message }) => message),
+    format: winston.format.combine(
+      winston.format.timestamp({ format: getISTTime }),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    ),
     transports: [
       new winston.transports.File({
         filename: path.join(logDir, `app-${getCurrentDate()}.log`)
       }),
-      new winston.transports.Console()
+      new winston.transports.Console({
+        format: winston.format.combine(
+          winston.format.timestamp({ format: getISTTime }),
+          winston.format.errors({ stack: true }),
+          winston.format.printf(({ timestamp, level, message, ...meta }) => {
+            const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+            return `${timestamp} ${level.toUpperCase()}: ${message}${metaStr}`;
+          })
+        )
+      })
     ]
   });
 
   logger = {
-    info: (...args) =>
-      baseLogger.info(`${getISTTime()} ${formatArgs(args)}`),
-
-    error: (...args) =>
-      baseLogger.error(`${getISTTime()} ${formatArgs(args)}`),
-
-    warn: (...args) =>
-      baseLogger.warn(`${getISTTime()} ${formatArgs(args)}`),
+    info: (message, meta = {}) => baseLogger.info(message, meta),
+    error: (message, meta = {}) => baseLogger.error(message, meta),
+    warn: (message, meta = {}) => baseLogger.warn(message, meta),
+    child: (defaultMeta) => baseLogger.child(defaultMeta)
   };
 }
 

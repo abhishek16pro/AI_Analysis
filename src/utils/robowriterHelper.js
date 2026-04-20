@@ -32,7 +32,7 @@ export async function addStrategy(strategy) {
 
 export async function getStgName(name) {
     try {
-        name = `DMC-${name}`
+        // name = `DMC-${name}`
         const token = await getAuthToken();
         const url = `${process.env.BASE_API_URL}/strategy/list`;
 

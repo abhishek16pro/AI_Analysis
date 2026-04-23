@@ -4,21 +4,21 @@ import logger from "../utils/logger.js";
 import connectRedis from "../utils/connectRedis.js";
 import { emitter, channels } from "../utils/eventEmitter.js";
 
-export async function runPullbackStrategy(stg) {
+export async function runPullbackStrategy(stg, startTime) {
   const strategyLogger = logger.child({ strategy: stg.name });
   try {
     if (!stg) return stg;
 
-    if (stg?.log?.isPullback) return await afterTrigger(stg);
+    if (stg?.log?.isPullback) return await afterTrigger(stg, startTime);
 
     let trend = null;
     let pullBackSignal = null;
 
-    const currentTime = Math.floor(new Date() / 1000);
+    const currentTime = startTime || Math.floor(new Date() / 1000);
 
     const limit = Math.max(parseInt(stg.slCandles), parseInt(stg.candleLookback));
-    const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
-    const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
+    const t1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
+    const t2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
     // strategyLogger.info("Timeframe 1 Candles:", t1[0]);
     // strategyLogger.info("Timeframe 2 Candles:", t2[0]);
 
@@ -40,7 +40,7 @@ export async function runPullbackStrategy(stg) {
       : parseFloat(stg.emaGapThreshold);
 
     const emaGapT1 = Math.abs(t1FirstEMA - t1SecondEMA);
-    // strategyLogger.info("Threshold status", { threshold, emaGapT1, isAboveThreshold: emaGapT1 >= threshold });
+    strategyLogger.info("Threshold status", { threshold, emaGapT1, isAboveThreshold: emaGapT1 >= threshold, currentTime });
     if (emaGapT1 < threshold) return stg;
 
     // Check for trend with both timeframes
@@ -97,15 +97,15 @@ export async function runPullbackStrategy(stg) {
   }
 }
 
-export async function afterTrigger(stg) {
+export async function afterTrigger(stg, startTime) {
   const strategyLogger = logger.child({ strategy: stg.name });
   try {
     strategyLogger.info("Running afterTrigger");
-    const currentTime = Math.floor(new Date() / 1000);
+    const currentTime = startTime || Math.floor(new Date() / 1000);
 
     const limit = Math.max(parseInt(stg.slCandles), parseInt(stg.candleLookback));
-    const latestCandleT1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
-    const latestCandleT2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit);
+    const latestCandleT1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
+    const latestCandleT2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
     // strategyLogger.info(latestCandleT1[0]);
 
     // Add delta check for current candle touches the ema2 or not
@@ -121,7 +121,7 @@ export async function afterTrigger(stg) {
     }
 
     const isBullish = stg.log.trend === "UP";
-    const breakoutCondition = isBullish ? latestCandleT1[0].close > stg.log.pullbackCandleInfo.high : latestCandleT1[0].close < stg.log.pullbackCandleInfo.low;
+    const breakoutCondition = isBullish ? latestCandleT1[0].close >= stg.log.pullbackCandleInfo.high : latestCandleT1[0].close <= stg.log.pullbackCandleInfo.low;
 
     if (breakoutCondition) {
       // Checking if the candle which triggered the signal has ema1 > ema2 in both timeframes

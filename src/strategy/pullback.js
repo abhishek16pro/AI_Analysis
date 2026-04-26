@@ -2,6 +2,7 @@ import Candle from "../../models/candle.js";
 import DynamicStg from '../../models/dynamicStg.js';
 import logger from "../utils/logger.js";
 import connectRedis from "../utils/connectRedis.js";
+import { saveLog } from "../utils/saveLogs.js";
 import { emitter, channels } from "../utils/eventEmitter.js";
 
 export async function runPullbackStrategy(stg, startTime) {
@@ -57,25 +58,35 @@ export async function runPullbackStrategy(stg, startTime) {
     strategyLogger.info("Pullback Signal", { pullBackSignal });
     if (!pullBackSignal) return stg;
 
-    strategyLogger.info("All conditions met. Triggering strategy.");
-    strategyLogger.info("Strategy execution details", { trend, pullBackSignal, emaGapT1 });
-
-    stg.log = stg.log || {};
-    // Add delta check for current chandle toches the ema2 or not
-    const isEma2 = (trend === "UP" && t1[0].low <= t1[0][`ema${stg.ema2}`]) || (trend === "DOWN" && t1[0].high >= t1[0][`ema${stg.ema2}`]);
-    stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
-    strategyLogger.info("DeltaCheckon updated to", { deltaCheckon: stg.log.deltaCheckon });
-
     // EMA validation check
     const isBullish = trend === "UP";
-    const emaArray = t1.slice(0, stg.candleLookback).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
+    const isEma2 = (trend === "UP" && t1[0].low <= t1[0][`ema${stg.ema2}`]) || (trend === "DOWN" && t1[0].high >= t1[0][`ema${stg.ema2}`]);
+    const emaArray = t1.slice(0, stg.candleLookback).map(c => c[`ema${stg[isEma2 ? 'ema2' : 'ema1']}`]);
     const emaCheck = emaArray.slice(1).filter((v, i) => isBullish ? v < emaArray[i] : v > emaArray[i]).length >= stg.candleJustify;
     strategyLogger.info("EMA validation check", { emaCheck, emaArray });
 
     if (!emaCheck) {
-      strategyLogger.info("EMA check failed. Not validating the signal.");
+      strategyLogger.info("EMA check failed. Not validating the EMA check.");
+      await saveLog(stg.name, stg.strategyType, "INFO", "EMA check failed. Not validating the EMA check.");
       return stg;
     }
+
+    strategyLogger.info("All conditions met. Triggering strategy.");
+    await saveLog(stg.name, stg.strategyType, "INFO", `All conditions met : Trend=${trend}, PullBackSignal=${pullBackSignal}, EMA validation check=${emaCheck}, EMA Gap=${emaGapT1}`);
+    strategyLogger.info("Strategy execution details", { trend, pullBackSignal, emaGapT1 });
+
+    stg.log = stg.log || {};
+    // Add delta check for current chandle toches the ema2 or not
+    stg.log.deltaCheckon = isEma2 ? 'ema2' : 'ema1';
+    strategyLogger.info("Strategy updated to", { deltaCheckon: stg.log.deltaCheckon });
+    await saveLog(stg.name, stg.strategyType, "INFO", `Strategy updated to: ${stg.log.deltaCheckon} 
+      ${JSON.stringify({
+      "timestamp": t1[0].timestamp,
+      "open": t1[0].open,
+      "high": t1[0].high,
+      "low": t1[0].low,
+      "close": t1[0].close
+    })}`);
 
     stg.log.trend = trend;
     stg.log.isPullback = true;
@@ -93,6 +104,7 @@ export async function runPullbackStrategy(stg, startTime) {
 
   } catch (error) {
     strategyLogger.warn("Error in runPullbackStrategy", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error in runPullbackStrategy: ${error.message || error} `);
     return stg;
   }
 }
@@ -106,14 +118,16 @@ export async function afterTrigger(stg, startTime) {
     const limit = Math.max(parseInt(stg.slCandles), parseInt(stg.candleLookback));
     const latestCandleT1 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t1, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
     const latestCandleT2 = await Candle.find({ timestamp: { $lte: currentTime }, timeframe: stg.t2, symbol: stg.index }).sort({ timestamp: -1 }).limit(limit).lean();
-    // strategyLogger.info(latestCandleT1[0]);
+    // logger.info("candle1", latestCandleT1[0]);
+    // logger.info("candle2", latestCandleT2[0]);
 
     // Add delta check for current candle touches the ema2 or not
     if (stg.log.deltaCheckon === 'ema1') {
-      const isEma2 = (stg.log.trend === "UP" && latestCandleT1[0].low <= latestCandleT1[0][`ema${stg.ema2}`]) || (stg.log.trend === "DOWN" && latestCandleT1[0].high >= latestCandleT1[0][`ema${stg.ema2}`]);
+      const isEma2 = (stg.log.trend === "UP" && latestCandleT1[0].low <= latestCandleT1[0][`ema${stg.ema2} `]) || (stg.log.trend === "DOWN" && latestCandleT1[0].high >= latestCandleT1[0][`ema${stg.ema2} `]);
       if (isEma2) {
         stg.log.deltaCheckon = 'ema2';
         strategyLogger.info("DeltaCheckon updated to", { deltaCheckon: stg.log.deltaCheckon });
+        await saveLog(stg.name, stg.strategyType, "INFO", `DeltaCheckon updated to: ${stg.log.deltaCheckon} `);
 
         await updateStrategyInDB(stg);
         await updateStrategyInRedis(stg);
@@ -129,21 +143,25 @@ export async function afterTrigger(stg, startTime) {
       const t1SecondEMA = latestCandleT1[0][`ema${stg.ema2}`];
       const t2FirstEMA = latestCandleT2[0][`ema${stg.ema1}`];
       const t2SecondEMA = latestCandleT2[0][`ema${stg.ema2}`];
-
       // Check for trend with both timeframes
+
       const trendCondition = isBullish ? (t1FirstEMA > t1SecondEMA && t2FirstEMA > t2SecondEMA) : (t1FirstEMA < t1SecondEMA && t2FirstEMA < t2SecondEMA);
 
       if (!trendCondition) {
+
         strategyLogger.info("Trend is not in favour");
+        await saveLog(stg.name, stg.strategyType, "INFO", "Trend is not in favour");
         return stg;
       }
 
       const emaArray = latestCandleT1.slice(0, stg.candleLookback).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
       const emaCheck = emaArray.slice(1).filter((v, i) => isBullish ? v < emaArray[i] : v > emaArray[i]).length >= stg.candleJustify;
       strategyLogger.info("EMA validation check", { emaCheck, emaArray });
+      await saveLog(stg.name, stg.strategyType, "INFO", `EMA validation check: emaCheck = ${emaCheck}, emaArray = ${JSON.stringify(emaArray)} `);
 
       if (!emaCheck) {
         strategyLogger.info("EMA check failed. Not validating the signal.");
+        await saveLog(stg.name, stg.strategyType, "INFO", "EMA check failed. Not validating the signal.");
         return stg;
       }
 
@@ -158,8 +176,9 @@ export async function afterTrigger(stg, startTime) {
       }
 
       const target = stoploss * parseFloat(stg.targetMultiplier);
-      strategyLogger.info(`Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target}`, { stoploss, target });
-      
+      strategyLogger.info(`Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target} `, { stoploss, target });
+      await saveLog(stg.name, stg.strategyType, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target} `);
+
       emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
 
 
@@ -186,6 +205,7 @@ export async function afterTrigger(stg, startTime) {
         low: latestCandleT1[0].low,
         close: latestCandleT1[0].close
       });
+      await saveLog(stg.name, stg.strategyType, "INFO", `Updating pullBack Candle: timestamp = ${latestCandleT1[0].timestamp}, open = ${latestCandleT1[0].open}, high = ${latestCandleT1[0].high}, low = ${latestCandleT1[0].low}, close = ${latestCandleT1[0].close} `);
       await updateStrategyInDB(stg);
       await updateStrategyInRedis(stg);
     }
@@ -194,6 +214,7 @@ export async function afterTrigger(stg, startTime) {
 
   } catch (error) {
     strategyLogger.warn("Error in afterTrigger", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error in afterTrigger: ${error.message || error} `);
   }
 }
 
@@ -202,6 +223,7 @@ async function reRunStrategy(stg) {
   try {
     if (stg.maxTrade <= 0) {
       strategyLogger.info("Max trade limit reached. Not re-running.");
+      await saveLog(stg.name, stg.strategyType, "INFO", "Max trade limit reached. Not re-running.");
       return stg;
     }
     // Clone the strategy to create a new one
@@ -218,7 +240,7 @@ async function reRunStrategy(stg) {
     const baseName = stg.name.replace(/_\d+$/, ''); // Remove existing suffix if present
 
     // Find the highest existing suffix for this strategy
-    const existingStrategies = await DynamicStg.find({ name: new RegExp(`^${baseName}(_\\d+)?$`) });
+    const existingStrategies = await DynamicStg.find({ name: new RegExp(`^ ${baseName} (_\\d +)?$`) });
 
     let newSuffix = 1;
     if (existingStrategies.length > 0) {
@@ -229,8 +251,9 @@ async function reRunStrategy(stg) {
       newSuffix = Math.max(...suffixes) + 1;
     }
 
-    newStg.name = `${baseName}_${newSuffix}`;
+    newStg.name = `${baseName}_${newSuffix} `;
     strategyLogger.info("Created new strategy version", { newName: newStg.name });
+    await saveLog(stg.name, stg.strategyType, "INFO", `Created new strategy version: ${newStg.name} `);
 
     // Save new strategy to database
     const savedStg = await DynamicStg.create(newStg);
@@ -239,10 +262,12 @@ async function reRunStrategy(stg) {
     const redisClient = await connectRedis();
     await redisClient.rpush("DMC", JSON.stringify(savedStg));
     strategyLogger.info("Strategy pushed to Redis DMC array and saved to database", { newName: newStg.name });
+    await saveLog(stg.name, stg.strategyType, "INFO", `Strategy pushed to Redis DMC array and saved to database: ${newStg.name} `);
 
     return savedStg;
   } catch (error) {
     strategyLogger.warn("Error in rerunStrategy", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error in rerunStrategy: ${error.message || error} `);
   }
 }
 
@@ -260,6 +285,7 @@ export async function updateStrategyInDB(stg) {
   }
   catch (error) {
     strategyLogger.error("Error occurred while updating strategy in DB", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error occurred while updating strategy in DB: ${error.message || error} `);
     return stg;
   }
 }
@@ -277,8 +303,10 @@ export async function updateStrategyInRedis(stg) {
     if (stgIndex !== -1) {
       await redisClient.lset("DMC", stgIndex, JSON.stringify(stg));
       strategyLogger.info("Strategy updated in Redis successfully");
+      // await saveLog(stg.name, stg.strategyType, "INFO", "Strategy updated in Redis successfully");
     }
   } catch (error) {
     strategyLogger.error("Error occurred while updating strategy in Redis", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error occurred while updating strategy in Redis: ${error.message || error} `);
   }
 }

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { saveLog } from './saveLogs.js';
 import logger from './logger.js';
 import connectRedis from './connectRedis.js';
 import { tokenMapping } from './constant.js';
@@ -22,11 +23,19 @@ export async function addStrategy(strategy) {
                 Authorization: `${token}`
             }
         });
-        logger.info("Strategy added successfully:", response.data.data._id);
+        console.log("Strategy added successfully:", response.data.data);
+        // logger.info("Strategy added successfully:", response);
         return response.data.data._id;
 
     } catch (error) {
         logger.error("Error adding strategy:", error);
+        await saveLog({
+            name: strategy?.name || 'Unknown',
+            key: 'addStrategy',
+            type: 'ERROR',
+            message: `Error adding strategy: ${error.message}`
+        });
+        throw error;
     }
 }
 
@@ -68,6 +77,12 @@ export async function getStgName(name) {
 
     } catch (error) {
         logger.error("Error fetching strategy name:", error.response ? error.response.data : error.message);
+        await saveLog({
+            name: name || 'Unknown',
+            key: 'getStgName',
+            type: 'ERROR',
+            message: `Error fetching strategy name: ${error.message}`
+        });
         throw error;
     }
 
@@ -76,17 +91,25 @@ export async function getStgName(name) {
 export async function triggerStg(id) {
     try {
         const token = await getAuthToken();
-        logger.info("Triggering strategy with ID:", id);
+        logger.info("Triggering strategy with ID:", {id});
         let url = `${process.env.BASE_API_URL}/strategy/loadStrategy/${id}`;
         let response = await axios.post(url, {}, {
             headers: {
                 Authorization: `${token}`
             }
         });
-        logger.info("Strategy triggered successfully:", response.data.message);
+        console.log("Strategy triggered successfully:", response.data.message);
+        // logger.info("Strategy triggered successfully:", response);
         return response.data.message;
     } catch (error) {
         logger.error("Error triggering strategy:", error.response ? error.response.data : error.message);
+        await saveLog({
+            name: 'Unknown',
+            key: 'triggerStg',
+            type: 'ERROR',
+            message: `Error triggering strategy ${id}: ${error.message}`
+        });
+        throw error;
     }
 }
 
@@ -97,7 +120,7 @@ export async function getUnderLying(index) {
         const underlyingParse = JSON.parse(underlyingJson);
         const underlyingValue = parseFloat(underlyingParse.Rate);
         return underlyingValue;
-        
+
     } catch (error) {
         logger.error("Error fetching underlying price:", error.response ? error.response.data : error.message);
     }
@@ -141,6 +164,12 @@ async function getAuthToken() {
 
     } catch (error) {
         logger.error("Error requesting auth token:", error.response ? error.response.data : error.message);
+        await saveLog({
+            name: 'Unknown',
+            key: 'getAuthToken',
+            type: 'ERROR',
+            message: `Error requesting auth token: ${error.message}`
+        });
         throw error;
     }
 }

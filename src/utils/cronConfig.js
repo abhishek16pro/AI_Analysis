@@ -35,7 +35,7 @@ const saveHistoricalDataJob = () => {
 
 export const initializeCronJobs = async () => {
     logger.info('[CRON] Initializing cron jobs...');
-    pushStgJob();
+    // pushStgJob();
     saveHistoricalDataJob();
     logger.info('[CRON] All cron jobs initialized successfully');
 };

@@ -1,19 +1,20 @@
-import Log from "../../models/log.js";
+import connectRedis from "./connectRedis.js";
+
+const client = await connectRedis()
 
 // type = ['INFO', "ERROR", "MESSAGE", "SIM"]
+// add client id in message first if possible
 
 export const saveLog = async (stgName, key, type, msg) => {
-    try {
-        const logMsg = {
-            name: stgName || 'Unknown',
-            key: key || 'Unknown',
-            type: type,
-            message: msg,
-            time: new Date(),
-        };
+  const logQueue = "Logs";
+  // console.log("msg",msg,type);
+  let logMsg = {
+    name: stgName || 'Unknown',
+    key: key || 'Unknown',
+    type: type,
+    message: msg,
+    time: new Date(),
+  };
 
-        await Log.create(logMsg);
-    } catch (error) {
-        console.error("Error saving log to DB:", error);
-    }
+  client.lpush(logQueue, JSON.stringify(logMsg));
 };

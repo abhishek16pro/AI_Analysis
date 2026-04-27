@@ -123,7 +123,7 @@ export async function afterTrigger(stg, startTime) {
 
     // Add delta check for current candle touches the ema2 or not
     if (stg.log.deltaCheckon === 'ema1') {
-      const isEma2 = (stg.log.trend === "UP" && latestCandleT1[0].low <= latestCandleT1[0][`ema${stg.ema2} `]) || (stg.log.trend === "DOWN" && latestCandleT1[0].high >= latestCandleT1[0][`ema${stg.ema2} `]);
+      const isEma2 = (stg.log.trend === "UP" && latestCandleT1[0].low <= latestCandleT1[0][`ema${stg.ema2}`]) || (stg.log.trend === "DOWN" && latestCandleT1[0].high >= latestCandleT1[0][`ema${stg.ema2}`]);
       if (isEma2) {
         stg.log.deltaCheckon = 'ema2';
         strategyLogger.info("DeltaCheckon updated to", { deltaCheckon: stg.log.deltaCheckon });
@@ -151,17 +151,41 @@ export async function afterTrigger(stg, startTime) {
 
         strategyLogger.info("Trend is not in favour");
         await saveLog(stg.name, stg.strategyType, "INFO", "Trend is not in favour");
+
+        // Update pullback candle info before returning
+        stg.log.pullbackCandleInfo = {
+          timestamp: latestCandleT1[0].timestamp,
+          open: latestCandleT1[0].open,
+          high: latestCandleT1[0].high,
+          low: latestCandleT1[0].low,
+          close: latestCandleT1[0].close,
+        };
+        await updateStrategyInDB(stg);
+        await updateStrategyInRedis(stg);
+
         return stg;
       }
 
       const emaArray = latestCandleT1.slice(0, stg.candleLookback).map(c => c[`ema${stg[stg.log.deltaCheckon]}`]);
       const emaCheck = emaArray.slice(1).filter((v, i) => isBullish ? v < emaArray[i] : v > emaArray[i]).length >= stg.candleJustify;
       strategyLogger.info("EMA validation check", { emaCheck, emaArray });
-      await saveLog(stg.name, stg.strategyType, "INFO", `EMA validation check: emaCheck = ${emaCheck}, emaArray = ${JSON.stringify(emaArray)} `);
+      await saveLog(stg.name, stg.strategyType, "INFO", `EMA Check on: EMA${stg[stg.log.deltaCheckon]}, emaArray = ${JSON.stringify(emaArray)} `);
 
       if (!emaCheck) {
         strategyLogger.info("EMA check failed. Not validating the signal.");
         await saveLog(stg.name, stg.strategyType, "INFO", "EMA check failed. Not validating the signal.");
+
+        // Update pullback candle info before returning
+        stg.log.pullbackCandleInfo = {
+          timestamp: latestCandleT1[0].timestamp,
+          open: latestCandleT1[0].open,
+          high: latestCandleT1[0].high,
+          low: latestCandleT1[0].low,
+          close: latestCandleT1[0].close,
+        };
+        await updateStrategyInDB(stg);
+        await updateStrategyInRedis(stg);
+
         return stg;
       }
 

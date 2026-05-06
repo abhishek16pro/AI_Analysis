@@ -3,11 +3,6 @@ import { addStrategy, getStgName, triggerStg } from "../utils/robowriterHelper.j
 import logger from '../utils/logger.js';
 import { saveLog } from "../utils/saveLogs.js";
 
-emitter.on(channels.PULLBACK_STRATEGY, async (data) => {
-    logger.info("Received PULLBACK_STRATEGY event with data:", data.stg.name);
-    await runPullbackStrategy(data);
-});
-
 export async function runPullbackStrategy(data) {
     try {
         const readyStg = await buildPullBackStg(data);
@@ -18,22 +13,45 @@ export async function runPullbackStrategy(data) {
         let triggerResponse = await triggerStg(response); // Trigger the strategy
         logger.info("Response from strategy triggering:", { triggerResponse });
         await saveLog(data.stg.name, data.stg.strategyType, "INFO", `Strategy triggered successfully: ${triggerResponse || 'No response message'}`);
+        return readyStg.name;
     } catch (error) {
         logger.warn("Error in runPullbackStrategy:", error);
-        await saveLog({
-            name: data.stg.name || 'Unknown',
-            key: 'runPullbackStrategy',
-            type: 'ERROR',
-            message: `Error in runPullbackStrategy: ${error.message}`
-        });
+        await saveLog(data.stg.name, data.stg.strategyType, "ERROR", `Error in runPullbackStrategy: ${error.message}`);
+
     }
 }
 
 export async function buildPullBackStg(data) {
     try {
         const name = await getStgName(data.stg.name)
-        const side1 = data.stg.log.trend === "DOWN" ? "PE" : "CE"
-        const side2 = data.stg.log.trend === "DOWN" ? "CE" : "PE"
+        let lot1, lot2;
+        let optionType1, optionType2;
+        let strikeSelectionType1, strikeSelectionType2;
+        let strikeSelectionValue1, strikeSelectionValue2;
+        let tradeType1, tradeType2;
+        if (data.stg.log.trend === "UP") {
+            lot1 = data.stg.upLegs[0].lot || 1;
+            lot2 = data.stg.upLegs[1].lot || 1;
+            tradeType1 = data.stg.upLegs[0].tradeType || "B";
+            tradeType2 = data.stg.upLegs[1].tradeType || "S";
+            optionType1 = data.stg.upLegs[0].optionType || "CE";
+            optionType2 = data.stg.upLegs[1].optionType || "PE";
+            strikeSelectionType1 = data.stg.upLegs[0].strikeSelectionType || "Atm";
+            strikeSelectionType2 = data.stg.upLegs[1].strikeSelectionType || "Atm";
+            strikeSelectionValue1 = String(data.stg.upLegs[0].strikeSelectionValue) || "0";
+            strikeSelectionValue2 = String(data.stg.upLegs[1].strikeSelectionValue) || "0";
+        } else {
+            lot1 = data.stg.downLegs[0].lot || 1;
+            lot2 = data.stg.downLegs[1].lot || 1;
+            optionType1 = data.stg.downLegs[0].optionType || "PE";
+            optionType2 = data.stg.downLegs[1].optionType || "CE";
+            strikeSelectionType1 = data.stg.downLegs[0].strikeSelectionType || "Atm";
+            strikeSelectionType2 = data.stg.downLegs[1].strikeSelectionType || "Atm";
+            strikeSelectionValue1 = String(data.stg.downLegs[0].strikeSelectionValue) || "0";
+            strikeSelectionValue2 = String(data.stg.downLegs[1].strikeSelectionValue) || "0";
+            tradeType1 = data.stg.downLegs[0].tradeType || "B";
+            tradeType2 = data.stg.downLegs[1].tradeType || "S";
+        }
         const startTime = new Date().toLocaleTimeString('en-GB', {
             hour12: false,
             hour: '2-digit',
@@ -76,8 +94,8 @@ export async function buildPullBackStg(data) {
             "rexDelay": 0,
             "onCompletionExecuteDelay": 0,
             "startTime": startTime,
-            "endTime": "15:25:00",
-            "sqTime": "15:25:00",
+            "endTime": data.stg.endTime,
+            "sqTime": data.stg.endTime,
             "wtCandleClose": 0,
             "rexCandleCloseTime": 0,
             "upPortfolioOnSl": [],
@@ -135,11 +153,11 @@ export async function buildPullBackStg(data) {
             "leg1": {
                 "added": true,
                 "idle": false,
-                "lot": 1,
-                "tradeType": "B",
-                "optionType": side1,
-                "strikeSelectionType": data.stg.legs[0].strikeSelectionType || "Atm",
-                "strikeSelectionValue": String(data.stg.legs[0].strikeSelectionValue) || "0",
+                "lot": lot1,
+                "tradeType": tradeType1,
+                "optionType": optionType1,
+                "strikeSelectionType": strikeSelectionType1,
+                "strikeSelectionValue": strikeSelectionValue1,
                 "waitTrade": null,
                 "vwapWaitTrade": null,
                 "underlyingWaitTrade": null,
@@ -169,11 +187,11 @@ export async function buildPullBackStg(data) {
             "leg2": {
                 "added": true,
                 "idle": false,
-                "lot": 1,
-                "tradeType": "S",
-                "optionType": side2,
-                "strikeSelectionType": data.stg.legs[1].strikeSelectionType || "Atm",
-                "strikeSelectionValue": String(data.stg.legs[1].strikeSelectionValue) || "0",
+                "lot": lot2,
+                "tradeType": tradeType2,
+                "optionType": optionType2,
+                "strikeSelectionType": strikeSelectionType2,
+                "strikeSelectionValue": strikeSelectionValue2,
                 "waitTrade": null,
                 "vwapWaitTrade": null,
                 "underlyingWaitTrade": null,
@@ -203,12 +221,7 @@ export async function buildPullBackStg(data) {
         return baseStg;
     } catch (error) {
         logger.error("Error in buildPullBackStg:", error);
-        await saveLog({
-            name: data.stg.name || 'Unknown',
-            key: 'buildPullBackStg',
-            type: 'ERROR',
-            message: `Error in buildPullBackStg: ${error.message}`
-        });
+        await saveLog(data.stg.name, data.stg.strategyType, "ERROR", `Error in buildPullBackStg: ${error.message}`);
         throw error;
     }
 }

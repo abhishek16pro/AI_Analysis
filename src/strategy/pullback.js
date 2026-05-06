@@ -3,13 +3,15 @@ import DynamicStg from '../../models/dynamicStg.js';
 import logger from "../utils/logger.js";
 import connectRedis from "../utils/connectRedis.js";
 import { saveLog } from "../utils/saveLogs.js";
-import { emitter, channels } from "../utils/eventEmitter.js";
+import { runPullbackStrategy as runPullBack } from "../strategybuilder/pullback.js";
+import { getStgStatus } from '../utils/robowriterHelper.js'
 
 export async function runPullbackStrategy(stg, startTime) {
   const strategyLogger = logger.child({ strategy: stg.name });
   try {
     if (!stg) return stg;
 
+    if (stg?.log?.isTradeActive) return await checkRex(stg);
     if (stg?.log?.isPullback) return await afterTrigger(stg, startTime);
 
     let trend = null;
@@ -99,8 +101,8 @@ export async function runPullbackStrategy(stg, startTime) {
     };
 
     await updateStrategyInRedis(stg);
-    const updatedStg = await updateStrategyInDB(stg)
-    return updatedStg;
+    // const updatedStg = await updateStrategyInDB(stg)
+    return stg;
 
   } catch (error) {
     strategyLogger.warn("Error in runPullbackStrategy", { error: error.message || error, stack: error.stack });
@@ -129,7 +131,7 @@ export async function afterTrigger(stg, startTime) {
         strategyLogger.info("DeltaCheckon updated to", { deltaCheckon: stg.log.deltaCheckon });
         await saveLog(stg.name, stg.strategyType, "INFO", `DeltaCheckon updated to: ${stg.log.deltaCheckon} `);
 
-        await updateStrategyInDB(stg);
+        // await updateStrategyInDB(stg);
         await updateStrategyInRedis(stg);
       }
     }
@@ -160,7 +162,7 @@ export async function afterTrigger(stg, startTime) {
           low: latestCandleT1[0].low,
           close: latestCandleT1[0].close,
         };
-        await updateStrategyInDB(stg);
+        // await updateStrategyInDB(stg);
         await updateStrategyInRedis(stg);
 
         return stg;
@@ -183,7 +185,7 @@ export async function afterTrigger(stg, startTime) {
           low: latestCandleT1[0].low,
           close: latestCandleT1[0].close,
         };
-        await updateStrategyInDB(stg);
+        // await updateStrategyInDB(stg);
         await updateStrategyInRedis(stg);
 
         return stg;
@@ -203,16 +205,13 @@ export async function afterTrigger(stg, startTime) {
       strategyLogger.info(`Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target} `, { stoploss, target });
       await saveLog(stg.name, stg.strategyType, "INFO", `Pullback signal emitted for ${stg.name} with SL: ${stoploss}, Target: ${target} `);
 
-      emitter.emit(channels.PULLBACK_STRATEGY, { stg, stoploss, target });
+      let name = await runPullBack({ stg, stoploss, target });
+      logger.info("Strategy triggered with name:", { name });
+      stg.log.isTradeActive = true;
+      stg.log.portfolioName = name;
 
-
-      stg.active = false;
-      stg.maxTrade -= 1;
-      await updateStrategyInDB(stg);
       await updateStrategyInRedis(stg);
-      if (stg.maxTrade > 0) {
-        await reRunStrategy(stg);
-      }
+
     } else {
       // Update pullback candle info
       stg.log.pullbackCandleInfo = {
@@ -229,8 +228,8 @@ export async function afterTrigger(stg, startTime) {
         low: latestCandleT1[0].low,
         close: latestCandleT1[0].close
       });
-      await saveLog(stg.name, stg.strategyType, "INFO", `Updating pullBack Candle: timestamp = ${latestCandleT1[0].timestamp}, open = ${latestCandleT1[0].open}, high = ${latestCandleT1[0].high}, low = ${latestCandleT1[0].low}, close = ${latestCandleT1[0].close} `);
-      await updateStrategyInDB(stg);
+      // await saveLog(stg.name, stg.strategyType, "INFO", `Updating pullBack Candle: timestamp = ${latestCandleT1[0].timestamp}, open = ${latestCandleT1[0].open}, high = ${latestCandleT1[0].high}, low = ${latestCandleT1[0].low}, close = ${latestCandleT1[0].close} `);
+      // await updateStrategyInDB(stg);
       await updateStrategyInRedis(stg);
     }
 
@@ -242,14 +241,45 @@ export async function afterTrigger(stg, startTime) {
   }
 }
 
+export async function checkRex(stg) {
+  const strategyLogger = logger.child({ strategy: stg.name });
+  try {
+    let status = await getStgStatus(stg.log.portfolioName);
+    strategyLogger.info("Current strategy status from getStgStatus", { status });
+    if (!status) return stg;
+    if (stg.rexOnTargetValue === 0 || stg.rexONSl === 0) {
+      stg.active = false;
+      stg.log.isTradeActive = false;
+      await updateStrategyInRedis(stg);
+    } else if (status === "Profit" && stg.rexOnTargetValue > 0) {
+      stg.rexOnTargetValue -= 1;
+      strategyLogger.info("Rex on target value. Re-running strategy.");
+      await saveLog(stg.name, stg.strategyType, "INFO", "Rex on target value. Re-running strategy.");
+      await reRunStrategy(stg);
+      stg.active = false;
+      stg.log.isTradeActive = false;
+      await updateStrategyInRedis(stg);
+    }
+    else if (status === "Loss" && stg.rexONSl > 0) {
+      stg.rexONSl -= 1;
+      strategyLogger.info("Rex on SL value. Re-running strategy.");
+      await saveLog(stg.name, stg.strategyType, "INFO", "Rex on SL value. Re-running strategy.");
+      await reRunStrategy(stg);
+      stg.active = false;
+      stg.log.isTradeActive = false;
+      await updateStrategyInRedis(stg);
+    }
+  } catch (error) {
+    strategyLogger.warn("Error in checkRex", { error: error.message || error, stack: error.stack });
+    await saveLog(stg.name, stg.strategyType, "ERROR", `Error in checkRex: ${error.message || error} `);
+  }
+}
+
+
 async function reRunStrategy(stg) {
   const strategyLogger = logger.child({ strategy: stg.name });
   try {
-    if (stg.maxTrade <= 0) {
-      strategyLogger.info("Max trade limit reached. Not re-running.");
-      await saveLog(stg.name, stg.strategyType, "INFO", "Max trade limit reached. Not re-running.");
-      return stg;
-    }
+
     // Clone the strategy to create a new one
     const newStg = JSON.parse(JSON.stringify(stg));
 
@@ -259,42 +289,31 @@ async function reRunStrategy(stg) {
     // Remove logs and set active to true
     newStg.log = {};
     newStg.active = true;
+    //add counter in name like name_1, name_2 based on existing strategy names in DB
+    let name = await getStgName(stg.name);
+    newStg.name = name;
 
-    // Generate new name with suffix
-    const baseName = stg.name.replace(/_\d+$/, ''); // Remove existing suffix if present
+    const rexStg = new DynamicStg(newStg);
+    console.log(rexStg);
 
-    // Find the highest existing suffix for this strategy
-    const existingStrategies = await DynamicStg.find({ name: new RegExp(`^ ${baseName} (_\\d +)?$`) });
 
-    let newSuffix = 1;
-    if (existingStrategies.length > 0) {
-      const suffixes = existingStrategies.map(s => {
-        const match = s.name.match(/_(\d+)$/);
-        return match ? parseInt(match[1]) : 0;
-      });
-      newSuffix = Math.max(...suffixes) + 1;
-    }
 
-    newStg.name = `${baseName}_${newSuffix} `;
-    strategyLogger.info("Created new strategy version", { newName: newStg.name });
-    await saveLog(stg.name, stg.strategyType, "INFO", `Created new strategy version: ${newStg.name} `);
 
-    // Save new strategy to database
-    const savedStg = await DynamicStg.create(newStg);
+    strategyLogger.info("Created new strategy version of", { name: rexStg.name });
+    await saveLog(stg.name, stg.strategyType, "INFO", `Created new strategy version of: ${rexStg.name} `);
 
     // Push to Redis DMC array
     const redisClient = await connectRedis();
-    await redisClient.rpush("DMC", JSON.stringify(savedStg));
-    strategyLogger.info("Strategy pushed to Redis DMC array and saved to database", { newName: newStg.name });
-    await saveLog(stg.name, stg.strategyType, "INFO", `Strategy pushed to Redis DMC array and saved to database: ${newStg.name} `);
+    await redisClient.rpush("DMC", JSON.stringify(rexStg));
+    strategyLogger.info("Strategy pushed to Redis DMC array", { newName: rexStg.name });
+    await saveLog(stg.name, stg.strategyType, "INFO", `Strategy pushed to Redis DMC array: ${rexStg.name} `);
 
-    return savedStg;
+    return rexStg;
   } catch (error) {
     strategyLogger.warn("Error in rerunStrategy", { error: error.message || error, stack: error.stack });
     await saveLog(stg.name, stg.strategyType, "ERROR", `Error in rerunStrategy: ${error.message || error} `);
   }
 }
-
 
 // Function to update the strategy in db
 export async function updateStrategyInDB(stg) {
@@ -333,4 +352,15 @@ export async function updateStrategyInRedis(stg) {
     strategyLogger.error("Error occurred while updating strategy in Redis", { error: error.message || error, stack: error.stack });
     await saveLog(stg.name, stg.strategyType, "ERROR", `Error occurred while updating strategy in Redis: ${error.message || error} `);
   }
+}
+
+export function getStgName(str) {
+  const match = str.match(/_(\d+)$/);
+
+  if (match) {
+    const number = parseInt(match[1], 10);
+    return str.replace(/_(\d+)$/, `_${number + 1}`);
+  }
+
+  return `${str}_1`;
 }
